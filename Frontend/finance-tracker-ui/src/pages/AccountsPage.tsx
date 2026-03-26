@@ -220,8 +220,13 @@ export default function AccountsPage() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {data?.map((account: any) => {
+                // Prefer the API's currentBalance; if it's missing/zero for a brand-new account,
+                // surface the opening balance so initial funds are visible.
+                const openingBalance = Number(account.openingBalance ?? 0);
+                const hasCurrent = Number.isFinite(account.currentBalance);
+                const currentBalance = hasCurrent ? Number(account.currentBalance) : null;
                 const effectiveBalance =
-                  account.currentBalance ?? account.openingBalance ?? 0;
+                  hasCurrent && currentBalance !== null ? currentBalance : openingBalance;
 
                 return (
                   <div
@@ -238,6 +243,15 @@ export default function AccountsPage() {
                     <p className="mt-4 text-2xl font-semibold text-white">
                       {formatCurrency(effectiveBalance)}
                     </p>
+                    <p className="text-xs text-white/55">
+                      Opening balance: {formatCurrency(openingBalance)}
+                    </p>
+                    {openingBalance > 0 &&
+                      (!hasCurrent || currentBalance === 0) && (
+                        <p className="text-xs text-cyan-200/70">
+                          Showing opening balance (no activity yet)
+                        </p>
+                      )}
 
                     <p className="mt-1 text-sm text-white/50">
                       {account.institutionName || "No institution"}

@@ -1,6 +1,5 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { authStore } from "../store/authStore";
-import { motion } from "framer-motion";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard" },
@@ -45,18 +44,16 @@ export default function AppLayout() {
             const active = location.pathname === item.to;
 
             return (
-              <Link key={item.to} to={item.to} className="relative">
-                <motion.div
-                  whileHover={{ y: -2, scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className={`relative rounded-full px-5 py-3 text-sm font-medium transition ${
+              <Link key={item.to} to={item.to} className="relative flex-shrink-0">
+                <div
+                  className={`relative rounded-full px-5 py-3 text-sm font-medium transition-all duration-200 border ${
                     active
-                      ? "bg-white/14 text-white neon-ring"
-                      : "text-white/60 hover:bg-white/8 hover:text-white"
+                      ? "bg-white/14 text-white border-white/20 neon-ring"
+                      : "text-white/60 border-transparent hover:bg-white/8 hover:text-white"
                   }`}
                 >
                   {item.label}
-                </motion.div>
+                </div>
               </Link>
             );
           })}
