@@ -22,4 +22,6 @@ public class Category
     public ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();
 
     public ICollection<RecurringTransaction> RecurringTransactions { get; set; } = new List<RecurringTransaction>();
+
+    public ICollection<Rule> Rules { get; set; } = new List<Rule>();
 }

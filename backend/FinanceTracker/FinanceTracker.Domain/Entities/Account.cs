@@ -31,4 +31,8 @@ public class Account
     public ICollection<Goal> Goals { get; set; } = new List<Goal>();
 
     public ICollection<RecurringTransaction> RecurringTransactions { get; set; } = new List<RecurringTransaction>();
+
+    public ICollection<AccountMember> Members { get; set; } = new List<AccountMember>();
+    public ICollection<AccountInvite> Invites { get; set; } = new List<AccountInvite>();
+    public ICollection<AccountActivity> Activities { get; set; } = new List<AccountActivity>();
 }

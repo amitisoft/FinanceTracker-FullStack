@@ -17,8 +17,11 @@ public class FinanceTrackerDbContext : DbContext
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<Budget> Budgets => Set<Budget>();
     public DbSet<Goal> Goals => Set<Goal>();
-
     public DbSet<RecurringTransaction> RecurringTransactions => Set<RecurringTransaction>();
+    public DbSet<Rule> Rules => Set<Rule>();
+    public DbSet<AccountMember> AccountMembers => Set<AccountMember>();
+    public DbSet<AccountInvite> AccountInvites => Set<AccountInvite>();
+    public DbSet<AccountActivity> AccountActivities => Set<AccountActivity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -137,6 +140,76 @@ public class FinanceTrackerDbContext : DbContext
                 .WithMany(a => a.RecurringTransactions)
                 .HasForeignKey(r => r.AccountId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Rule>(entity =>
+        {
+            entity.Property(r => r.Name).HasMaxLength(120).IsRequired();
+            entity.Property(r => r.Field).HasMaxLength(50).IsRequired();
+            entity.Property(r => r.Operator).HasMaxLength(20).IsRequired();
+            entity.Property(r => r.Value).HasMaxLength(200).IsRequired();
+            entity.Property(r => r.IsEnabled).HasDefaultValue(true);
+
+            entity.HasOne(r => r.Category)
+                .WithMany(c => c.Rules)
+                .HasForeignKey(r => r.CategoryId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(r => r.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(r => new { r.UserId, r.Name });
+        });
+
+        modelBuilder.Entity<AccountMember>(entity =>
+        {
+            entity.Property(m => m.Role).HasMaxLength(20).IsRequired();
+            entity.Property(m => m.IsActive).HasDefaultValue(true);
+
+            entity.HasIndex(m => new { m.AccountId, m.UserId }).IsUnique();
+
+            entity.HasOne(m => m.Account)
+                .WithMany(a => a.Members)
+                .HasForeignKey(m => m.AccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(m => m.User)
+                .WithMany()
+                .HasForeignKey(m => m.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AccountInvite>(entity =>
+        {
+            entity.Property(i => i.Email).HasMaxLength(200).IsRequired();
+            entity.Property(i => i.Role).HasMaxLength(20).IsRequired();
+            entity.Property(i => i.Token).HasMaxLength(120).IsRequired();
+            entity.Property(i => i.Status).HasMaxLength(20).IsRequired();
+
+            entity.HasIndex(i => new { i.AccountId, i.Email });
+
+            entity.HasOne(i => i.Account)
+                .WithMany(a => a.Invites)
+                .HasForeignKey(i => i.AccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AccountActivity>(entity =>
+        {
+            entity.Property(a => a.Action).HasMaxLength(20).IsRequired();
+            entity.Property(a => a.EntityType).HasMaxLength(50).IsRequired();
+
+            entity.HasOne(a => a.Account)
+                .WithMany(a => a.Activities)
+                .HasForeignKey(a => a.AccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(a => a.User)
+                .WithMany()
+                .HasForeignKey(a => a.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

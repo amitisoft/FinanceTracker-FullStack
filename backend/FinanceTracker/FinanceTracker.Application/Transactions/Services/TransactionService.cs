@@ -1,6 +1,7 @@
-﻿using FinanceTracker.Application.Transactions.Commands;
+using FinanceTracker.Application.Transactions.Commands;
 using FinanceTracker.Application.Transactions.DTOs;
 using FinanceTracker.Application.Transactions.Queries;
+using FinanceTracker.Application.Rules.Services;
 using FinanceTracker.Domain.Entities;
 using FinanceTracker.Domain.Exceptions;
 using FinanceTracker.Domain.Interfaces;
@@ -28,15 +29,24 @@ public class TransactionService : ITransactionService
     private readonly ITransactionRepository _transactionRepository;
     private readonly IAccountRepository _accountRepository;
     private readonly ICategoryRepository _categoryRepository;
+    private readonly IRuleService _ruleService;
+    private readonly IAccountMemberRepository _memberRepository;
+    private readonly IAccountActivityRepository _activityRepository;
 
     public TransactionService(
         ITransactionRepository transactionRepository,
         IAccountRepository accountRepository,
-        ICategoryRepository categoryRepository)
+        ICategoryRepository categoryRepository,
+        IRuleService ruleService,
+        IAccountMemberRepository memberRepository,
+        IAccountActivityRepository activityRepository)
     {
         _transactionRepository = transactionRepository;
         _accountRepository = accountRepository;
         _categoryRepository = categoryRepository;
+        _ruleService = ruleService;
+        _memberRepository = memberRepository;
+        _activityRepository = activityRepository;
     }
 
     public async Task<TransactionDto> CreateAsync(Guid userId, CreateTransactionCommand command)
@@ -52,10 +62,36 @@ public class TransactionService : ITransactionService
             command.Note,
             command.PaymentMethod);
 
+        var resolvedCategoryId = command.CategoryId;
+        if (resolvedCategoryId is null)
+        {
+            var rule = await _ruleService.GetMatchingRuleAsync(
+                userId,
+                command.Merchant ?? string.Empty,
+                command.Note ?? string.Empty,
+                command.Amount,
+                command.Type);
+            if (rule?.CategoryId is not null)
+                resolvedCategoryId = rule.CategoryId;
+        }
+
+        var finalCategoryId = resolvedCategoryId ??
+            throw new DomainException("Category is required (set manually or via a matching rule).");
+
+        if (context.Category is null)
+        {
+            var ruleCategory = await _categoryRepository.GetByIdAsync(finalCategoryId, userId);
+            if (ruleCategory is null)
+                throw new DomainException("Category not found.");
+            if (ruleCategory.IsArchived)
+                throw new DomainException("Archived categories cannot be used.");
+            if (!string.Equals(ruleCategory.Type, command.Type, StringComparison.OrdinalIgnoreCase))
+                throw new DomainException("Category type must match transaction type.");
+        }
+
         var type = command.Type.Trim().ToLowerInvariant();
         var now = DateTime.UtcNow;
 
-        // Prevent negative balance for expense
         if (type == "expense" && !CanDebit(context.Account, command.Amount))
             throw new DomainException("Insufficient balance in the selected account.");
 
@@ -64,7 +100,7 @@ public class TransactionService : ITransactionService
             Id = Guid.NewGuid(),
             UserId = userId,
             AccountId = context.Account.Id,
-            CategoryId = context.Category.Id,
+            CategoryId = finalCategoryId,
             Type = type,
             Amount = command.Amount,
             TransactionDate = command.Date,
@@ -79,6 +115,16 @@ public class TransactionService : ITransactionService
         context.Account.LastUpdatedAt = now;
 
         await _transactionRepository.AddAsync(transaction);
+        await _activityRepository.AddAsync(new AccountActivity
+        {
+            Id = Guid.NewGuid(),
+            AccountId = transaction.AccountId,
+            UserId = userId,
+            Action = "created",
+            EntityType = "transaction",
+            EntityId = transaction.Id,
+            CreatedAt = now
+        });
         await _transactionRepository.SaveChangesAsync();
 
         return Map(transaction);
@@ -102,11 +148,17 @@ public class TransactionService : ITransactionService
         if (existing is null)
             return null;
 
-        var oldAccount = await _accountRepository.GetByIdAsync(existing.AccountId, userId);
+        var oldAccount = await _accountRepository.GetByIdAsync(existing.AccountId);
         if (oldAccount is null)
             throw new DomainException("Original account not found.");
 
-        // Revert old transaction impact first
+        if (oldAccount.UserId != userId)
+        {
+            var member = await _memberRepository.GetByUserAndAccountAsync(userId, existing.AccountId);
+            if (member is null || member.Role == "viewer" || !member.IsActive)
+                throw new DomainException("Account access denied.");
+        }
+
         RevertBalance(oldAccount, existing.Type, existing.Amount);
         oldAccount.LastUpdatedAt = DateTime.UtcNow;
 
@@ -121,14 +173,40 @@ public class TransactionService : ITransactionService
             command.Note,
             command.PaymentMethod);
 
+        var resolvedCategoryId = command.CategoryId;
+        if (resolvedCategoryId is null)
+        {
+            var rule = await _ruleService.GetMatchingRuleAsync(
+                userId,
+                command.Merchant ?? string.Empty,
+                command.Note ?? string.Empty,
+                command.Amount,
+                command.Type);
+            if (rule?.CategoryId is not null)
+                resolvedCategoryId = rule.CategoryId;
+        }
+
+        var finalCategoryId = resolvedCategoryId ??
+            throw new DomainException("Category is required (set manually or via a matching rule).");
+
+        if (context.Category is null)
+        {
+            var ruleCategory = await _categoryRepository.GetByIdAsync(finalCategoryId, userId);
+            if (ruleCategory is null)
+                throw new DomainException("Category not found.");
+            if (ruleCategory.IsArchived)
+                throw new DomainException("Archived categories cannot be used.");
+            if (!string.Equals(ruleCategory.Type, command.Type, StringComparison.OrdinalIgnoreCase))
+                throw new DomainException("Category type must match transaction type.");
+        }
+
         var newType = command.Type.Trim().ToLowerInvariant();
 
-        // Prevent negative balance after update
         if (newType == "expense" && !CanDebit(context.Account, command.Amount))
             throw new DomainException("Insufficient balance in the selected account.");
 
         existing.AccountId = context.Account.Id;
-        existing.CategoryId = context.Category.Id;
+        existing.CategoryId = finalCategoryId;
         existing.Type = newType;
         existing.Amount = command.Amount;
         existing.TransactionDate = command.Date;
@@ -140,6 +218,16 @@ public class TransactionService : ITransactionService
         ApplyBalance(context.Account, newType, command.Amount);
         context.Account.LastUpdatedAt = DateTime.UtcNow;
 
+        await _activityRepository.AddAsync(new AccountActivity
+        {
+            Id = Guid.NewGuid(),
+            AccountId = existing.AccountId,
+            UserId = userId,
+            Action = "updated",
+            EntityType = "transaction",
+            EntityId = existing.Id,
+            CreatedAt = DateTime.UtcNow
+        });
         await _transactionRepository.SaveChangesAsync();
 
         return Map(existing);
@@ -151,20 +239,37 @@ public class TransactionService : ITransactionService
         if (existing is null)
             return false;
 
-        var account = await _accountRepository.GetByIdAsync(existing.AccountId, userId);
+        var account = await _accountRepository.GetByIdAsync(existing.AccountId);
         if (account is null)
             throw new DomainException("Account not found.");
+
+        if (account.UserId != userId)
+        {
+            var member = await _memberRepository.GetByUserAndAccountAsync(userId, existing.AccountId);
+            if (member is null || member.Role == "viewer" || !member.IsActive)
+                throw new DomainException("Account access denied.");
+        }
 
         RevertBalance(account, existing.Type, existing.Amount);
         account.LastUpdatedAt = DateTime.UtcNow;
 
         _transactionRepository.Remove(existing);
+        await _activityRepository.AddAsync(new AccountActivity
+        {
+            Id = Guid.NewGuid(),
+            AccountId = existing.AccountId,
+            UserId = userId,
+            Action = "deleted",
+            EntityType = "transaction",
+            EntityId = existing.Id,
+            CreatedAt = DateTime.UtcNow
+        });
         await _transactionRepository.SaveChangesAsync();
 
         return true;
     }
 
-    private async Task<(Account Account, Category Category, string? Merchant, string? Note, string? PaymentMethod)>
+    private async Task<(Account Account, Category? Category, string? Merchant, string? Note, string? PaymentMethod)>
         BuildAndValidateTransactionContext(
             Guid userId,
             string? typeInput,
@@ -196,22 +301,30 @@ public class TransactionService : ITransactionService
         if (date == default)
             throw new DomainException("Transaction date is required.");
 
-        var account = await _accountRepository.GetByIdAsync(accountId, userId);
+        var account = await _accountRepository.GetByIdAsync(accountId);
         if (account is null)
             throw new DomainException("Account not found.");
 
-        if (categoryId is null)
-            throw new DomainException("Category is required.");
+        if (account.UserId != userId)
+        {
+            var member = await _memberRepository.GetByUserAndAccountAsync(userId, accountId);
+            if (member is null || member.Role == "viewer" || !member.IsActive)
+                throw new DomainException("Account access denied.");
+        }
 
-        var category = await _categoryRepository.GetByIdAsync(categoryId.Value, userId);
-        if (category is null)
-            throw new DomainException("Category not found.");
+        Category? category = null;
+        if (categoryId is not null)
+        {
+            category = await _categoryRepository.GetByIdAsync(categoryId.Value, userId);
+            if (category is null)
+                throw new DomainException("Category not found.");
 
-        if (category.IsArchived)
-            throw new DomainException("Archived categories cannot be used.");
+            if (category.IsArchived)
+                throw new DomainException("Archived categories cannot be used.");
 
-        if (!string.Equals(category.Type, type, StringComparison.OrdinalIgnoreCase))
-            throw new DomainException("Category type must match transaction type.");
+            if (!string.Equals(category.Type, type, StringComparison.OrdinalIgnoreCase))
+                throw new DomainException("Category type must match transaction type.");
+        }
 
         if (merchant is not null && merchant.Length > 200)
             throw new DomainException("Merchant cannot exceed 200 characters.");

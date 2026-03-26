@@ -59,6 +59,32 @@ public class ReportsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("trends")]
+    [ProducesResponseType(typeof(TrendsReportDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetTrends([FromQuery] GetTrendsReportQuery query)
+    {
+        if (!TryGetUserId(out var userId))
+            return UnauthorizedProblem();
+
+        var result = await _reportService.GetTrendsAsync(userId, query);
+        return Ok(result);
+    }
+
+    [HttpGet("net-worth")]
+    [ProducesResponseType(typeof(IReadOnlyList<NetWorthPointDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetNetWorth([FromQuery] GetNetWorthReportQuery query)
+    {
+        if (!TryGetUserId(out var userId))
+            return UnauthorizedProblem();
+
+        var result = await _reportService.GetNetWorthAsync(userId, query);
+        return Ok(result);
+    }
+
     private bool TryGetUserId(out Guid userId)
     {
         var userIdValue =

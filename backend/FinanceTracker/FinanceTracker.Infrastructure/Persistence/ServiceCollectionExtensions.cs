@@ -7,6 +7,9 @@ using FinanceTracker.Application.Goals.Services;
 using FinanceTracker.Application.Recurring.Services;
 using FinanceTracker.Application.Reports.Services;
 using FinanceTracker.Application.Transactions.Services;
+using FinanceTracker.Application.Forecast.Services;
+using FinanceTracker.Application.Insights.Services;
+using FinanceTracker.Application.Rules.Services;
 using FinanceTracker.Domain.Interfaces;
 using FinanceTracker.Infrastructure.Persistence;
 using FinanceTracker.Infrastructure.Repositories;
@@ -32,10 +35,16 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICategoryRepository, CategoryRepository>();
         services.AddScoped<ITransactionRepository, TransactionRepository>();
         services.AddScoped<IBudgetRepository, BudgetRepository>();
+        services.AddScoped<IRuleRepository, RuleRepository>();
+        services.AddScoped<IAccountMemberRepository, AccountMemberRepository>();
+        services.AddScoped<IAccountInviteRepository, AccountInviteRepository>();
+        services.AddScoped<IAccountActivityRepository, AccountActivityRepository>();
+        services.AddScoped<IForecastService, ForecastService>();
 
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IAccountService, AccountService>();
+        services.AddScoped<IAccountSharingService, AccountSharingService>();
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<ITransactionService, TransactionService>();
         services.AddScoped<IBudgetService, BudgetService>();
@@ -43,9 +52,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IGoalRepository, GoalRepository>();
         services.AddScoped<IGoalService, GoalService>();
-
         services.AddScoped<IRecurringTransactionRepository, RecurringTransactionRepository>();
         services.AddScoped<IRecurringTransactionService, RecurringTransactionService>();
+        services.AddScoped<IRuleService, RuleService>();
+        services.AddScoped<IHealthScoreService, HealthScoreService>();
+        services.AddScoped<IInsightsService, InsightsService>();
 
         return services;
     }

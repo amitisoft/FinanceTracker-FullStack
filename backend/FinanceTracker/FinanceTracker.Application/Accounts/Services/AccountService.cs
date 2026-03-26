@@ -1,4 +1,4 @@
-﻿using FinanceTracker.Application.Accounts.Commands;
+using FinanceTracker.Application.Accounts.Commands;
 using FinanceTracker.Application.Accounts.DTOs;
 using FinanceTracker.Application.Accounts.Queries;
 using FinanceTracker.Domain.Entities;
@@ -18,10 +18,12 @@ public class AccountService : IAccountService
     };
 
     private readonly IAccountRepository _accountRepository;
+    private readonly IAccountMemberRepository _memberRepository;
 
-    public AccountService(IAccountRepository accountRepository)
+    public AccountService(IAccountRepository accountRepository, IAccountMemberRepository memberRepository)
     {
         _accountRepository = accountRepository;
+        _memberRepository = memberRepository;
     }
 
     public async Task<AccountDto> CreateAsync(Guid userId, CreateAccountCommand command)
@@ -32,7 +34,7 @@ public class AccountService : IAccountService
             ? null
             : command.InstitutionName.Trim();
 
-        if(command.OpeningBalance < 0)
+        if (command.OpeningBalance < 0)
             throw new DomainException("Opening Balance Should not be in Negative Number.");
 
         if (string.IsNullOrWhiteSpace(name))
@@ -73,14 +75,32 @@ public class AccountService : IAccountService
 
     public async Task<IReadOnlyList<AccountDto>> GetAllAsync(Guid userId, GetAccountsQuery query)
     {
-        var accounts = await _accountRepository.GetAllByUserIdAsync(userId);
-        return accounts.Select(Map).ToList();
+        var owned = await _accountRepository.GetAllByUserIdAsync(userId);
+        var memberAccountIds = await _memberRepository.GetAccountIdsForUserAsync(userId);
+        var memberAccounts = new List<Account>();
+        foreach (var accountId in memberAccountIds)
+        {
+            var account = await _accountRepository.GetByIdAsync(accountId);
+            if (account is not null)
+                memberAccounts.Add(account);
+        }
+
+        var all = owned.Concat(memberAccounts).GroupBy(a => a.Id).Select(g => g.First()).ToList();
+        return all.Select(Map).ToList();
     }
 
     public async Task<AccountDto?> GetByIdAsync(Guid userId, GetAccountByIdQuery query)
     {
         var account = await _accountRepository.GetByIdAsync(query.Id, userId);
-        return account is null ? null : Map(account);
+        if (account is not null)
+            return Map(account);
+
+        var member = await _memberRepository.GetByUserAndAccountAsync(userId, query.Id);
+        if (member is null)
+            return null;
+
+        var shared = await _accountRepository.GetByIdAsync(query.Id);
+        return shared is null ? null : Map(shared);
     }
 
     public async Task<TransferResultDto> TransferAsync(Guid userId, TransferFundsCommand command)

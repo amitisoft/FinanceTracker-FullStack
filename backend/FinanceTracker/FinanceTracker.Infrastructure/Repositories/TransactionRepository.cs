@@ -21,14 +21,22 @@ public class TransactionRepository : ITransactionRepository
 
     public async Task<Transaction?> GetByIdAsync(Guid id, Guid userId)
     {
+        var sharedAccountIds = _db.AccountMembers
+            .Where(m => m.UserId == userId && m.IsActive)
+            .Select(m => m.AccountId);
+
         return await _db.Transactions
-            .FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId);
+            .FirstOrDefaultAsync(t => t.Id == id && (t.UserId == userId || sharedAccountIds.Contains(t.AccountId)));
     }
 
     public async Task<IReadOnlyList<Transaction>> GetAllByUserIdAsync(Guid userId)
     {
+        var sharedAccountIds = _db.AccountMembers
+            .Where(m => m.UserId == userId && m.IsActive)
+            .Select(m => m.AccountId);
+
         return await _db.Transactions
-            .Where(t => t.UserId == userId)
+            .Where(t => t.UserId == userId || sharedAccountIds.Contains(t.AccountId))
             .OrderByDescending(t => t.TransactionDate)
             .ThenByDescending(t => t.CreatedAt)
             .ToListAsync();

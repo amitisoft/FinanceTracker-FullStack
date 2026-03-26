@@ -25,6 +25,11 @@ public class AccountRepository : IAccountRepository
             .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId);
     }
 
+    public async Task<Account?> GetByIdAsync(Guid id)
+    {
+        return await _db.Accounts.FirstOrDefaultAsync(a => a.Id == id);
+    }
+
     public async Task<IReadOnlyList<Account>> GetAllByUserIdAsync(Guid userId)
     {
         return await _db.Accounts

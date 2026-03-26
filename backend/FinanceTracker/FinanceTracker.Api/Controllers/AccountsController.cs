@@ -15,10 +15,12 @@ namespace FinanceTracker.Api.Controllers;
 public class AccountsController : ControllerBase
 {
     private readonly IAccountService _accountService;
+    private readonly IAccountSharingService _accountSharingService;
 
-    public AccountsController(IAccountService accountService)
+    public AccountsController(IAccountService accountService, IAccountSharingService accountSharingService)
     {
         _accountService = accountService;
+        _accountSharingService = accountSharingService;
     }
 
     [HttpPost]
@@ -77,6 +79,47 @@ public class AccountsController : ControllerBase
             return UnauthorizedProblem();
 
         var result = await _accountService.TransferAsync(userId, command);
+
+        return Ok(result);
+    }
+
+    [HttpPost("{id:guid}/invite")]
+    [ProducesResponseType(typeof(AccountInviteDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Invite(Guid id, [FromBody] InviteAccountMemberCommand command)
+    {
+        if (!TryGetUserId(out var userId))
+            return UnauthorizedProblem();
+
+        var result = await _accountSharingService.InviteAsync(userId, id, command);
+        return CreatedAtAction(nameof(GetMembers), new { id }, result);
+    }
+
+    [HttpGet("{id:guid}/members")]
+    [ProducesResponseType(typeof(IReadOnlyList<AccountMemberDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetMembers(Guid id)
+    {
+        if (!TryGetUserId(out var userId))
+            return UnauthorizedProblem();
+
+        var result = await _accountSharingService.GetMembersAsync(userId, id);
+        return Ok(result);
+    }
+
+    [HttpPut("{id:guid}/members/{memberUserId:guid}")]
+    [ProducesResponseType(typeof(AccountMemberDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateMember(Guid id, Guid memberUserId, [FromBody] UpdateAccountMemberRoleCommand command)
+    {
+        if (!TryGetUserId(out var userId))
+            return UnauthorizedProblem();
+
+        var result = await _accountSharingService.UpdateMemberAsync(userId, id, memberUserId, command);
+        if (result is null)
+            return NotFoundProblem("Member not found.");
 
         return Ok(result);
     }
