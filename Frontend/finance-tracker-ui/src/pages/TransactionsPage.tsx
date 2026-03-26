@@ -139,10 +139,6 @@ export default function TransactionsPage() {
       nextErrors.accountId = "Account is required";
     }
 
-    if (!values.categoryId) {
-      nextErrors.categoryId = "Category is required";
-    }
-
     return nextErrors;
   }
 
@@ -161,7 +157,7 @@ export default function TransactionsPage() {
       amount: Number(form.amount),
       date: `${form.date}T00:00:00Z`,
       accountId: form.accountId,
-      categoryId: form.categoryId,
+      categoryId: form.categoryId || null,
       merchant: form.merchant.trim() || undefined,
       note: form.note.trim() || undefined,
       paymentMethod: form.paymentMethod || undefined,
@@ -256,7 +252,7 @@ export default function TransactionsPage() {
 
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-white/80">
-                  Category
+                  Category (optional)
                 </label>
                 <select
                   value={form.categoryId}

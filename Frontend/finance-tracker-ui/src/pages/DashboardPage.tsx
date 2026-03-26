@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { getDashboardSummary } from "../features/dashboard/dashboardApi";
+import { getMonthlyForecast } from "../features/forecast/forecastApi";
+import { getHealthScore } from "../features/insights/insightsApi";
 import { formatCurrency, formatDate } from "../utils/format";
 import GlassCard from "../components/Glasscard";
 import {
@@ -10,6 +12,8 @@ import {
   YAxis,
   Tooltip,
   Bar,
+  LineChart,
+  Line,
 } from "recharts";
 
 export default function DashboardPage() {
@@ -20,6 +24,16 @@ export default function DashboardPage() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard-summary", month, year],
     queryFn: () => getDashboardSummary(month, year),
+  });
+
+  const { data: forecast } = useQuery({
+    queryKey: ["forecast-month"],
+    queryFn: getMonthlyForecast,
+  });
+
+  const { data: health } = useQuery({
+    queryKey: ["health-score"],
+    queryFn: getHealthScore,
   });
 
   if (isLoading) {
@@ -45,6 +59,34 @@ export default function DashboardPage() {
         <StatCard title="Expenses" value={formatCurrency(data.expenseTotal)} />
         <StatCard title="Net" value={formatCurrency(data.net)} />
         <StatCard title="Balance" value={formatCurrency(data.totalAccountBalance)} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <GlassCard className="p-6">
+          <p className="text-sm text-white/50">Projected end-of-month</p>
+          <p className="mt-3 text-3xl font-semibold text-white">
+            {forecast ? formatCurrency(forecast.projectedEndBalance) : "--"}
+          </p>
+          <p className="mt-2 text-xs text-white/50">
+            Risk: {forecast?.riskLevel ?? "unknown"}
+          </p>
+        </GlassCard>
+
+        <GlassCard className="p-6">
+          <p className="text-sm text-white/50">Safe to spend</p>
+          <p className="mt-3 text-3xl font-semibold text-white">
+            {forecast?.daily?.length ? formatCurrency(forecast.daily[0].safeToSpend) : "--"}
+          </p>
+          <p className="mt-2 text-xs text-white/50">Daily projection</p>
+        </GlassCard>
+
+        <GlassCard className="p-6">
+          <p className="text-sm text-white/50">Health score</p>
+          <p className="mt-3 text-3xl font-semibold text-white">
+            {health?.score ?? "--"}
+          </p>
+          <p className="mt-2 text-xs text-white/50">0–100 scale</p>
+        </GlassCard>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-12">
@@ -106,6 +148,28 @@ export default function DashboardPage() {
                 </div>
               ))
             )}
+          </div>
+        </GlassCard>
+
+        <GlassCard className="lg:col-span-12 p-6">
+          <h3 className="mb-5 text-lg font-semibold text-white">Projected balance</h3>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={forecast?.daily ?? []}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                <XAxis dataKey="date" stroke="rgba(255,255,255,0.55)" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis stroke="rgba(255,255,255,0.55)" fontSize={12} tickLine={false} axisLine={false} />
+                <Tooltip
+                  contentStyle={{
+                    background: "rgba(15, 23, 42, 0.92)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: "16px",
+                  }}
+                  formatter={(value: number) => [formatCurrency(value), "Projected"]}
+                />
+                <Line type="monotone" dataKey="projectedBalance" stroke="#22d3ee" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         </GlassCard>
 

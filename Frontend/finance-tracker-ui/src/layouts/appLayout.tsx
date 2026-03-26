@@ -10,6 +10,9 @@ const navItems = [
   { to: "/goals", label: "Goals" },
   { to: "/recurring", label: "Recurring" },
   { to: "/reports", label: "Reports" },
+  { to: "/insights", label: "Insights" },
+  { to: "/rules", label: "Rules" },
+  { to: "/shared", label: "Shared" },
 ];
 
 export default function AppLayout() {
