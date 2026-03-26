@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { authStore } from "../store/authstore";
+import { authStore } from "../store/authStore";
 import { motion } from "framer-motion";
 
 const navItems = [

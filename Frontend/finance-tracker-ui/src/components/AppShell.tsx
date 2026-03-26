@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { Menu, X } from "lucide-react";
 import SidebarNav from "./SidebarNav";
-import { authStore } from "../store/authstore";
+import { authStore } from "../store/authStore";
 import { useNavigate } from "react-router-dom";
 
 type Props = {

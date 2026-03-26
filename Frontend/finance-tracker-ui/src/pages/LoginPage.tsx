@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { login } from "../features/auth/authApi";
-import { authStore } from "../store/authstore";
+import { authStore } from "../store/authStore";
 import { getApiErrorMessage } from "../lib/getApiErrorMessage";
 import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";

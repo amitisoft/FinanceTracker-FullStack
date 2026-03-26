@@ -1,5 +1,5 @@
 import { Navigate, Outlet } from "react-router-dom";
-import { authStore } from "../store/authstore";
+import { authStore } from "../store/authStore";
 
 export default function ProtectedRoute() {
   const token = authStore((s) => s.accessToken);
