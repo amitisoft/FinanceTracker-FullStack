@@ -1,0 +1,10 @@
+# Visual Studio junk
+.vs/
+obj/
+bin/
+*.user
+
+# Node/React junk
+node_modules/
+dist/
+.env

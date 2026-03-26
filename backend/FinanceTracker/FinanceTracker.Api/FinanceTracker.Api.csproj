@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<UserSecretsId>4e6f5c0e-1eb9-4966-85da-b222e4f86956</UserSecretsId>
+		<DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+		<GenerateDocumentationFile>false</GenerateDocumentationFile>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.5">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+
+		<!-- Swagger (Swashbuckle) -->
+		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.5" />
+
+		<!-- Docker / Podman tooling support -->
+		<PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.23.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Project references -->
+		<ProjectReference Include="..\FinanceTracker.Application\FinanceTracker.Application.csproj" />
+		<ProjectReference Include="..\FinanceTracker.Infrastructure\FinanceTracker.Infrastructure.csproj" />
+	</ItemGroup>
+
+</Project>
