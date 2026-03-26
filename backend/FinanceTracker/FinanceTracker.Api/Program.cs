@@ -29,7 +29,7 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(
             "http://localhost:5173",         
             "https://localhost:5173",
-            "https://YOUR-STATIC-WEB-APP.azurestaticapps.net" 
+            "https://yellow-bay-023f7d200.2.azurestaticapps.net"
         )
         .AllowAnyHeader()
         .AllowAnyMethod();
