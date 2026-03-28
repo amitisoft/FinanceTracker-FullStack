@@ -6,6 +6,7 @@ type Props = {
   loadingLabel?: string;
   disabled?: boolean;
   onComplete: () => void;
+  tone?: "dark" | "light";
 };
 
 export default function IntentCapsule({
@@ -13,6 +14,7 @@ export default function IntentCapsule({
   loadingLabel = "Entering...",
   disabled,
   onComplete,
+  tone = "dark",
 }: Props) {
   const [progress, setProgress] = useState(0);
   const intervalRef = useRef<number | null>(null);
@@ -26,6 +28,8 @@ export default function IntentCapsule({
 
   const handleStart = () => {
     if (disabled) return;
+    if (progress >= 100) return;
+    if (intervalRef.current) return;
 
     clearTimer();
     intervalRef.current = window.setInterval(() => {
@@ -63,7 +67,24 @@ export default function IntentCapsule({
       onMouseLeave={handleEnd}
       onTouchStart={handleStart}
       onTouchEnd={handleEnd}
-      className="relative w-full overflow-hidden rounded-full border border-white/10 bg-white/10 px-4 py-4 text-white transition disabled:opacity-50"
+      onBlur={handleEnd}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleStart();
+        }
+      }}
+      onKeyUp={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleEnd();
+        }
+      }}
+      className={
+        tone === "light"
+          ? "relative w-full overflow-hidden rounded-full border border-slate-900/10 bg-slate-900/5 px-4 py-4 text-slate-900 transition disabled:opacity-50"
+          : "relative w-full overflow-hidden rounded-full border border-white/10 bg-white/10 px-4 py-4 text-white transition disabled:opacity-50"
+      }
     >
       <motion.div
         className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-cyan-400/40 via-violet-500/35 to-fuchsia-500/40"
@@ -71,7 +92,13 @@ export default function IntentCapsule({
         transition={{ ease: "easeOut", duration: 0.12 }}
       />
 
-      <div className="absolute inset-0 rounded-full shadow-[0_0_30px_rgba(34,211,238,0.12)]" />
+      <div
+        className={
+          tone === "light"
+            ? "absolute inset-0 rounded-full shadow-[0_0_28px_rgba(34,211,238,0.10)]"
+            : "absolute inset-0 rounded-full shadow-[0_0_30px_rgba(34,211,238,0.12)]"
+        }
+      />
 
       <span className="relative z-10 text-base font-medium">
         {progress > 0 && progress < 100 ? loadingLabel : label}

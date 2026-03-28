@@ -5,9 +5,11 @@ import { authStore } from "../store/authStore";
 import { getApiErrorMessage } from "../lib/getApiErrorMessage";
 import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
+import clsx from "clsx";
 import GlassCard from "../components/Glasscard";
 import NeonInput from "../components/NeonInput";
 import IntentCapsule from "../components/IntentCapsule";
+import { useAuthTheme } from "../lib/useAuthTheme";
 
 type LoginFormState = {
   email: string;
@@ -28,6 +30,8 @@ function isValidEmail(value: string) {
 export default function LoginPage() {
   const navigate = useNavigate();
   const setTokens = authStore((s) => s.setTokens);
+  const { theme, toggle } = useAuthTheme();
+  const isLight = theme === "light";
 
   const [form, setForm] = useState<LoginFormState>({ ...DEFAULT_VALUES });
   const [errors, setErrors] = useState<LoginFormErrors>({});
@@ -109,10 +113,32 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="grid-glow relative flex min-h-screen items-center justify-center overflow-hidden px-3 py-6 sm:px-4 sm:py-10">
-      <div className="absolute left-[-120px] top-[-120px] h-80 w-80 rounded-full bg-cyan-400/10 blur-3xl" />
-      <div className="absolute bottom-[-140px] right-[-100px] h-96 w-96 rounded-full bg-fuchsia-500/10 blur-3xl" />
-      <div className="absolute right-[10%] top-[20%] h-56 w-56 rounded-full bg-violet-500/10 blur-3xl" />
+    <div
+      className={clsx(
+        "grid-glow relative flex min-h-screen items-center justify-center overflow-hidden px-3 py-6 sm:px-4 sm:py-10",
+        isLight
+          ? "grid-glow-light bg-gradient-to-br from-slate-50 via-white to-slate-100 text-slate-900"
+          : "text-white"
+      )}
+    >
+      <div
+        className={clsx(
+          "absolute left-[-120px] top-[-120px] h-80 w-80 rounded-full blur-3xl",
+          isLight ? "bg-cyan-400/15" : "bg-cyan-400/10"
+        )}
+      />
+      <div
+        className={clsx(
+          "absolute bottom-[-140px] right-[-100px] h-96 w-96 rounded-full blur-3xl",
+          isLight ? "bg-fuchsia-500/12" : "bg-fuchsia-500/10"
+        )}
+      />
+      <div
+        className={clsx(
+          "absolute right-[10%] top-[20%] h-56 w-56 rounded-full blur-3xl",
+          isLight ? "bg-violet-500/12" : "bg-violet-500/10"
+        )}
+      />
 
       <div className="grid w-full max-w-6xl gap-4 sm:gap-6 lg:gap-8 lg:grid-cols-[1.1fr_0.9fr]">
         <motion.div
@@ -122,50 +148,66 @@ export default function LoginPage() {
           className="hidden flex-col justify-center lg:flex"
         >
           <div className="max-w-xl">
-            <p className="mb-4 text-sm uppercase tracking-[0.28em] text-cyan-300/80">
+            <p
+              className={clsx(
+                "mb-4 text-sm uppercase tracking-[0.28em]",
+                isLight ? "text-cyan-700/90" : "text-cyan-300/80"
+              )}
+            >
               Encrypted Finance Habitat
             </p>
 
-            <h1 className="text-4xl font-semibold leading-tight text-white sm:text-5xl lg:text-6xl">
+            <h1
+              className={clsx(
+                "text-4xl font-semibold leading-tight sm:text-5xl lg:text-6xl",
+                isLight ? "text-slate-900" : "text-white"
+              )}
+            >
               Enter your <span className="text-neon">financial space</span>
             </h1>
 
-            <p className="mt-6 max-w-lg text-base leading-7 text-white/65 sm:text-lg sm:leading-8">
+            <p
+              className={clsx(
+                "mt-6 max-w-lg text-base leading-7 sm:text-lg sm:leading-8",
+                isLight ? "text-slate-700" : "text-white/65"
+              )}
+            >
               Immersive budgeting, transaction intelligence, and premium control -
               all in one fluid workspace.
             </p>
 
-            <div className="mt-10 grid max-w-xl grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="glass-soft rounded-3xl p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-                  Security
-                </p>
-                <p className="mt-3 text-xl font-semibold text-white">
-                  JWT protected access
-                </p>
-              </div>
 
-              <div className="glass-soft rounded-3xl p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-                  Experience
-                </p>
-                <p className="mt-3 text-xl font-semibold text-white">
-                  Spatial navigation
-                </p>
-              </div>
-            </div>
           </div>
         </motion.div>
 
-        <GlassCard className="mx-auto w-full max-w-xl p-5 sm:p-8 md:p-10">
+        <GlassCard tone={theme} className="mx-auto w-full max-w-xl p-5 sm:p-8 md:p-10">
           <div className="mb-8">
-            <p className="mb-3 text-sm uppercase tracking-[0.25em] text-white/45">
-              Welcome back
-            </p>
-            <h2 className="text-3xl font-semibold text-white sm:text-4xl">
+            <div className="flex items-start justify-between gap-3">
+              <p
+                className={clsx(
+                  "mb-3 text-sm uppercase tracking-[0.25em]",
+                  isLight ? "text-slate-600" : "text-white/45"
+                )}
+              >
+                Welcome back
+              </p>
+              <button
+                type="button"
+                onClick={toggle}
+                className={clsx(
+                  "rounded-full border px-3 py-1 text-xs font-medium transition",
+                  isLight
+                    ? "border-slate-900/10 bg-slate-900/5 text-slate-700 hover:bg-slate-900/10"
+                    : "border-white/10 bg-white/10 text-white/70 hover:bg-white/15"
+                )}
+              >
+                {isLight ? "Dark" : "Light"} mode
+              </button>
+            </div>
+            <h2 className={clsx("text-3xl font-semibold sm:text-4xl", isLight ? "text-slate-900" : "text-white")}>
               Sign in
             </h2>
-            <p className="mt-3 text-sm text-white/60 sm:text-base">
+            <p className={clsx("mt-3 text-sm sm:text-base", isLight ? "text-slate-700" : "text-white/60")}>
               Access your tracker with an intent-driven entry flow.
             </p>
           </div>
@@ -181,6 +223,10 @@ export default function LoginPage() {
               label="Email"
               type="email"
               placeholder="you@example.com"
+              autoComplete="email"
+              autoCapitalize="none"
+              spellCheck={false}
+              tone={theme}
               value={form.email}
               onChange={(e) => setField("email", e.target.value)}
               error={errors.email}
@@ -190,6 +236,8 @@ export default function LoginPage() {
               label="Password"
               type="password"
               placeholder="Enter your password"
+              autoComplete="current-password"
+              tone={theme}
               value={form.password}
               onChange={(e) => setField("password", e.target.value)}
               error={errors.password}
@@ -210,16 +258,23 @@ export default function LoginPage() {
                 loadingLabel="Entering workspace..."
                 disabled={mutation.isPending}
                 onComplete={submitIntent}
+                tone={theme}
               />
             </div>
           </form>
 
-          <div className="mt-8 flex flex-col gap-3 text-sm text-white/55 sm:flex-row sm:items-center sm:justify-between">
-            <Link to="/forgot-password" className="text-cyan-300 hover:text-cyan-200">
+          <div className={clsx("mt-8 flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between", isLight ? "text-slate-600" : "text-white/55")}>
+            <Link
+              to="/forgot-password"
+              className={clsx(isLight ? "text-cyan-700 hover:text-cyan-600" : "text-cyan-300 hover:text-cyan-200")}
+            >
               Forgot password?
             </Link>
-            <span>Secure session · Real-time sync</span>
-            <Link to="/register" className="text-cyan-300 hover:text-cyan-200">
+            <span>Secure session • Real-time sync</span>
+            <Link
+              to="/register"
+              className={clsx(isLight ? "text-cyan-700 hover:text-cyan-600" : "text-cyan-300 hover:text-cyan-200")}
+            >
               Create account
             </Link>
           </div>

@@ -43,11 +43,28 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
+.glass-card-light {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(26px);
+  -webkit-backdrop-filter: blur(26px);
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  box-shadow:
+    0 14px 40px rgba(15, 23, 42, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
 .glass-soft {
   background: rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(22px);
   -webkit-backdrop-filter: blur(22px);
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-soft-light {
+  background: rgba(15, 23, 42, 0.03);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(15, 23, 42, 0.08);
 }
 
 .neon-ring {
@@ -78,6 +95,12 @@ body {
   background-size: 48px 48px;
   mask-image: radial-gradient(circle at center, black 45%, transparent 90%);
   pointer-events: none;
+}
+
+.grid-glow-light::before {
+  background-image:
+    linear-gradient(rgba(15, 23, 42, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.06) 1px, transparent 1px);
 }
 
 .scrollbar-thin::-webkit-scrollbar {
