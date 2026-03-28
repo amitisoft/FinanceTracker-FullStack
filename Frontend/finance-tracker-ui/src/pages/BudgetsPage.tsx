@@ -380,8 +380,8 @@ export default function BudgetsPage() {
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="text-lg font-semibold text-white">Active Budgets</h3>
 
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div className="flex gap-2">
+              <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                <div className="flex shrink-0 gap-2">
                   <input
                     type="number"
                     min={1}
@@ -404,7 +404,7 @@ export default function BudgetsPage() {
                   type="button"
                   onClick={() => duplicateMutation.mutate()}
                   disabled={duplicateMutation.isPending}
-                  className="rounded-2xl border border-white/10 bg-white/6 px-4 py-2 text-sm text-white/70 disabled:opacity-50"
+                  className="shrink-0 rounded-2xl border border-white/10 bg-white/6 px-4 py-2 text-sm text-white/70 disabled:opacity-50"
                 >
                   {duplicateMutation.isPending ? "Duplicating..." : "Duplicate prev month"}
                 </button>
@@ -414,7 +414,7 @@ export default function BudgetsPage() {
                   placeholder="Search category..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white outline-none focus:border-cyan-500/50 sm:w-64"
+                  className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white outline-none focus:border-cyan-500/50 sm:min-w-[220px]"
                 />
               </div>
             </div>
