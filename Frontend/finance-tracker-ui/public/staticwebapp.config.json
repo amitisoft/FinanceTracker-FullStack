@@ -1,0 +1,23 @@
+{
+  "navigationFallback": {
+    "rewrite": "/index.html"
+  },
+  "routes": [
+    { "route": "/signin", "redirect": "/login", "statusCode": 302 },
+    { "route": "/signup", "redirect": "/register", "statusCode": 302 },
+    { "route": "/auth", "redirect": "/login", "statusCode": 302 },
+
+    { "route": "/workspace", "redirect": "/dashboard", "statusCode": 302 },
+    { "route": "/vault", "redirect": "/accounts", "statusCode": 302 },
+    { "route": "/flow", "redirect": "/transactions", "statusCode": 302 },
+    { "route": "/limits", "redirect": "/budgets", "statusCode": 302 },
+    { "route": "/targets", "redirect": "/goals", "statusCode": 302 },
+    { "route": "/pulse", "redirect": "/reports", "statusCode": 302 },
+    { "route": "/signals", "redirect": "/insights", "statusCode": 302 },
+    { "route": "/score", "redirect": "/health-score", "statusCode": 302 },
+    { "route": "/autopilot", "redirect": "/rules", "statusCode": 302 },
+    { "route": "/autopay", "redirect": "/recurring", "statusCode": 302 },
+    { "route": "/shelves", "redirect": "/categories", "statusCode": 302 },
+    { "route": "/family", "redirect": "/shared", "statusCode": 302 }
+  ]
+}
