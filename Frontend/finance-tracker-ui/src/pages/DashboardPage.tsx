@@ -1,9 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { getDashboardSummary } from "../features/dashboard/dashboardApi";
 import { getMonthlyForecast } from "../features/forecast/forecastApi";
 import { getHealthScore } from "../features/insights/insightsApi";
 import { getIncomeVsExpenseReport } from "../features/reports/reportsApi";
+import { clearDemoData, seedDemoData } from "../features/demo/demoApi";
+import { getApiErrorMessage } from "../lib/getApiErrorMessage";
 import { formatCurrency, formatDate } from "../utils/format";
 import GlassCard from "../components/Glasscard";
 import {
@@ -19,9 +22,12 @@ import {
 } from "recharts";
 
 export default function DashboardPage() {
+  const queryClient = useQueryClient();
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
+  const [showDemoGuide, setShowDemoGuide] = useState(false);
+  const [demoMessage, setDemoMessage] = useState<string>("");
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard-summary", month, year],
@@ -90,6 +96,53 @@ export default function DashboardPage() {
     return items;
   }, [data?.budgetProgressCards, forecast]);
 
+  const invalidateAllDemoQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+    queryClient.invalidateQueries({ queryKey: ["accounts"] });
+    queryClient.invalidateQueries({ queryKey: ["transactions"] });
+    queryClient.invalidateQueries({ queryKey: ["budgets"] });
+    queryClient.invalidateQueries({ queryKey: ["goals"] });
+    queryClient.invalidateQueries({ queryKey: ["recurring"] });
+    queryClient.invalidateQueries({ queryKey: ["rules"] });
+    queryClient.invalidateQueries({ queryKey: ["forecast-month"] });
+    queryClient.invalidateQueries({ queryKey: ["insights"] });
+    queryClient.invalidateQueries({ queryKey: ["health-score"] });
+    queryClient.invalidateQueries({ queryKey: ["trends"] });
+    queryClient.invalidateQueries({ queryKey: ["net-worth"] });
+    queryClient.invalidateQueries({ queryKey: ["report-category-spend"] });
+    queryClient.invalidateQueries({ queryKey: ["report-income-expense"] });
+    queryClient.invalidateQueries({ queryKey: ["report-account-trend"] });
+  };
+
+  const demoMutation = useMutation({
+    mutationFn: seedDemoData,
+    onSuccess: (result) => {
+      const message =
+        result?.message ||
+        (result?.alreadySeeded ? "Demo data already exists." : "Demo data created.");
+      setDemoMessage(message);
+      setShowDemoGuide(true);
+      invalidateAllDemoQueries();
+    },
+    onError: (error) => {
+      setDemoMessage(getApiErrorMessage(error, "Failed to seed demo data."));
+      setShowDemoGuide(true);
+    },
+  });
+
+  const clearDemoMutation = useMutation({
+    mutationFn: clearDemoData,
+    onSuccess: (result) => {
+      setDemoMessage(result?.message || "Demo data cleared.");
+      setShowDemoGuide(true);
+      invalidateAllDemoQueries();
+    },
+    onError: (error) => {
+      setDemoMessage(getApiErrorMessage(error, "Failed to clear demo data."));
+      setShowDemoGuide(true);
+    },
+  });
+
   if (isLoading) {
     return <GlassCard className="p-6 text-white/70">Loading dashboard...</GlassCard>;
   }
@@ -108,10 +161,46 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div>
         <p className="text-sm uppercase tracking-[0.24em] text-cyan-300/75">Overview</p>
-        <h2 className="mt-2 text-4xl font-semibold text-white">Dashboard</h2>
-        <p className="mt-2 text-white/55">
-          Month {month} / {year}
-        </p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="mt-2 text-4xl font-semibold text-white">Dashboard</h2>
+            <p className="mt-2 text-white/55">
+              Month {month} / {year}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (demoMutation.isPending || clearDemoMutation.isPending) return;
+                setDemoMessage("");
+                demoMutation.mutate();
+              }}
+              className="rounded-2xl border border-white/10 bg-white/6 px-4 py-2 text-sm text-white/70 transition hover:bg-white/10 disabled:opacity-50"
+              disabled={demoMutation.isPending || clearDemoMutation.isPending}
+            >
+              {demoMutation.isPending ? "Launching..." : "Launch Showcase"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (demoMutation.isPending || clearDemoMutation.isPending) return;
+                const ok = window.confirm(
+                  "Exit Showcase mode and remove only demo data (demo accounts, transactions, budgets, goals, recurring, rules)? Your own data stays."
+                );
+                if (!ok) return;
+                setDemoMessage("");
+                clearDemoMutation.mutate();
+              }}
+              className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-2 text-sm text-rose-100/90 transition hover:bg-rose-500/15 disabled:opacity-50"
+              disabled={demoMutation.isPending || clearDemoMutation.isPending}
+            >
+              {clearDemoMutation.isPending ? "Exiting..." : "Exit Showcase"}
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-4">
@@ -173,9 +262,11 @@ export default function DashboardPage() {
         <GlassCard className="p-6">
           <p className="text-sm text-white/50">Health score</p>
           <p className="mt-3 text-3xl font-semibold text-white">
-            {health?.score ?? "--"}
+            {health?.hasData === false ? "--" : (health?.score ?? "--")}
           </p>
-          <p className="mt-2 text-xs text-white/50">0–100 scale</p>
+          <p className="mt-2 text-xs text-white/50">
+            {health?.hasData === false ? health?.note ?? "Add transactions to calculate a score." : "0–100 scale"}
+          </p>
         </GlassCard>
       </div>
 
@@ -391,7 +482,55 @@ export default function DashboardPage() {
           )}
         </GlassCard>
       </div>
+
+      {showDemoGuide ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-3 py-6">
+          <GlassCard className="w-full max-w-2xl p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm uppercase tracking-[0.24em] text-cyan-300/75">
+                  Demo mode
+                </p>
+                <h3 className="mt-2 text-2xl font-semibold text-white">
+                  Ready for judging
+                </h3>
+                <p className="mt-2 text-sm text-white/60">
+                  {demoMessage}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDemoGuide(false)}
+                className="rounded-2xl border border-white/10 bg-white/6 px-3 py-2 text-sm text-white/70 hover:bg-white/10"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <GuideLink to="/transactions" title="Flow" desc="View & edit seeded transactions." />
+              <GuideLink to="/budgets" title="Limits" desc="See budget progress and alerts." />
+              <GuideLink to="/reports" title="Pulse" desc="Open reports and export CSV." />
+              <GuideLink to="/insights" title="Signals" desc="Health score + trends + net worth." />
+              <GuideLink to="/recurring" title="AutoPay" desc="Upcoming bills and processing." />
+              <GuideLink to="/rules" title="Autopilot" desc="Rule-based auto-categorization." />
+            </div>
+          </GlassCard>
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+function GuideLink({ to, title, desc }: { to: string; title: string; desc: string }) {
+  return (
+    <Link
+      to={to}
+      className="rounded-2xl border border-white/10 bg-white/6 px-4 py-4 transition hover:bg-white/10"
+    >
+      <p className="text-sm uppercase tracking-[0.24em] text-white/45">{title}</p>
+      <p className="mt-2 text-sm font-medium text-white">{desc}</p>
+    </Link>
   );
 }
 

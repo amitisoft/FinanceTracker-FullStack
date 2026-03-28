@@ -10,5 +10,7 @@ public interface IGoalRepository
 
     Task<IReadOnlyList<Goal>> GetAllByUserIdAsync(Guid userId);
 
+    void Remove(Goal goal);
+
     Task SaveChangesAsync();
 }

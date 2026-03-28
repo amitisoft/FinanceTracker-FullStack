@@ -30,7 +30,37 @@ public class HealthScoreService : IHealthScoreService
         var txns = await _txnRepo.GetAllByUserIdAsync(userId);
         var budgets = await _budgetRepo.GetByMonthYearAsync(userId, asOfUtc.Month, asOfUtc.Year);
 
+        if (txns.Count == 0)
+        {
+            return new HealthScoreDto
+            {
+                Score = 0,
+                HasData = false,
+                Note = "Add a few transactions to calculate your health score.",
+                Suggestions = new List<string>
+                {
+                    "Add your first account and transaction to unlock insights.",
+                    "Create a budget for your top spending category for better guidance."
+                }
+            };
+        }
+
         var last30 = txns.Where(t => t.TransactionDate >= asOfUtc.AddDays(-30)).ToList();
+        if (last30.Count == 0)
+        {
+            return new HealthScoreDto
+            {
+                Score = 0,
+                HasData = false,
+                Note = "No transactions in the last 30 days - score needs recent activity.",
+                Suggestions = new List<string>
+                {
+                    "Add a recent transaction to start tracking trends.",
+                    "If you imported older data, add at least one transaction this month."
+                }
+            };
+        }
+
         var income = last30.Where(t => t.Type.Equals("income", StringComparison.OrdinalIgnoreCase)).Sum(t => t.Amount);
         var expense = last30.Where(t => t.Type.Equals("expense", StringComparison.OrdinalIgnoreCase)).Sum(t => t.Amount);
         var savingsRate = income == 0 ? 0 : Math.Clamp((income - expense) / income, 0, 1);
@@ -48,6 +78,7 @@ public class HealthScoreService : IHealthScoreService
         return new HealthScoreDto
         {
             Score = Math.Clamp(score, 0, 100),
+            HasData = true,
             Breakdown = new Dictionary<string, decimal>
             {
                 ["savingsRate"] = (decimal)savingsRate,

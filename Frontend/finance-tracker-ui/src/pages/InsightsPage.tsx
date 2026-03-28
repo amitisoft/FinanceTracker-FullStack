@@ -42,8 +42,14 @@ export default function InsightsPage() {
         <div className="grid gap-4 lg:grid-cols-3">
           <GlassCard className="p-5">
             <p className="text-sm text-white/60">Health score</p>
-            <p className="mt-2 text-4xl font-semibold text-white">{health?.score ?? "--"}</p>
-            <p className="mt-2 text-xs text-white/50">Based on savings rate, stability, budget adherence, buffer.</p>
+            <p className="mt-2 text-4xl font-semibold text-white">
+              {health?.hasData === false ? "--" : (health?.score ?? "--")}
+            </p>
+            <p className="mt-2 text-xs text-white/50">
+              {health?.hasData === false
+                ? health?.note ?? "Add transactions to calculate a score."
+                : "Based on savings rate, stability, budget adherence, buffer."}
+            </p>
           </GlassCard>
 
           <GlassCard className="p-5 lg:col-span-2">

@@ -17,7 +17,12 @@ export default function HealthScorePage() {
 
         <GlassCard className="p-6">
           <p className="text-sm text-white/60">Score</p>
-          <p className="mt-2 text-5xl font-semibold text-white">{data?.score ?? "--"}</p>
+          <p className="mt-2 text-5xl font-semibold text-white">
+            {data?.hasData === false ? "--" : (data?.score ?? "--")}
+          </p>
+          {data?.hasData === false ? (
+            <p className="mt-2 text-sm text-white/55">{data?.note ?? "Add transactions to calculate a score."}</p>
+          ) : null}
         </GlassCard>
 
         <div className="grid gap-4 lg:grid-cols-2">

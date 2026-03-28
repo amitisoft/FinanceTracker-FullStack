@@ -38,6 +38,11 @@ public class AccountRepository : IAccountRepository
             .ToListAsync();
     }
 
+    public void Remove(Account account)
+    {
+        _db.Accounts.Remove(account);
+    }
+
     public async Task SaveChangesAsync()
     {
         await _db.SaveChangesAsync();

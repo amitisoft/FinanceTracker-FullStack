@@ -33,6 +33,11 @@ public class GoalRepository : IGoalRepository
             .ToListAsync();
     }
 
+    public void Remove(Goal goal)
+    {
+        _db.Goals.Remove(goal);
+    }
+
     public async Task SaveChangesAsync()
     {
         await _db.SaveChangesAsync();

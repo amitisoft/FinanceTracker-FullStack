@@ -1,5 +1,7 @@
 export type HealthScore = {
   score: number;
+  hasData?: boolean;
+  note?: string;
   breakdown: Record<string, number>;
   suggestions: string[];
 };

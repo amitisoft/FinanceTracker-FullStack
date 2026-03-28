@@ -23,6 +23,7 @@ public class FinanceTrackerDbContext : DbContext
     public DbSet<AccountInvite> AccountInvites => Set<AccountInvite>();
     public DbSet<AccountActivity> AccountActivities => Set<AccountActivity>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<DemoSeedState> DemoSeedStates => Set<DemoSeedState>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -221,6 +222,17 @@ public class FinanceTrackerDbContext : DbContext
             entity.HasOne(t => t.User)
                 .WithMany()
                 .HasForeignKey(t => t.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DemoSeedState>(entity =>
+        {
+            entity.HasKey(x => x.UserId);
+            entity.Property(x => x.PayloadJson).IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

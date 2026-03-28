@@ -11,5 +11,7 @@ public interface IAccountRepository
 
     Task<IReadOnlyList<Account>> GetAllByUserIdAsync(Guid userId);
 
+    void Remove(Account account);
+
     Task SaveChangesAsync();
 }
