@@ -9,6 +9,7 @@ import GlassCard from "../components/Glasscard";
 import NeonInput from "../components/NeonInput";
 import IntentCapsule from "../components/IntentCapsule";
 import { useAuthTheme } from "../lib/useAuthTheme";
+import type { RegisterResponse } from "../types/auth";
 
 type RegisterFormState = {
   displayName: string;
@@ -35,13 +36,14 @@ export default function RegisterPage() {
 
   const [form, setForm] = useState<RegisterFormState>({ ...DEFAULT_VALUES });
   const [errors, setErrors] = useState<RegisterFormErrors>({});
+  const [success, setSuccess] = useState<RegisterResponse | null>(null);
 
   const mutation = useMutation({
     mutationFn: registerUser,
-    onSuccess: () => {
+    onSuccess: (data) => {
       setForm({ ...DEFAULT_VALUES });
       setErrors({});
-      navigate("/login", { replace: true });
+      setSuccess(data ?? { message: "Verification email sent.", emailSent: true });
     },
   });
 
@@ -51,6 +53,7 @@ export default function RegisterPage() {
   ) {
     setForm((prev) => ({ ...prev, [key]: value }));
     setErrors((prev) => ({ ...prev, [key]: undefined }));
+    setSuccess(null);
   }
 
   function validateForm(values: RegisterFormState): RegisterFormErrors {
@@ -88,6 +91,7 @@ export default function RegisterPage() {
   function submitIntent() {
     const nextErrors = validateForm(form);
     setErrors(nextErrors);
+    setSuccess(null);
 
     if (Object.keys(nextErrors).length > 0) {
       return;
@@ -188,6 +192,46 @@ export default function RegisterPage() {
               Enter a valid profile to initialize your workspace.
             </p>
           </div>
+
+          {success ? (
+            <div className={clsx(
+              "mb-6 rounded-2xl border px-4 py-4",
+              isLight
+                ? "border-emerald-600/15 bg-emerald-500/10 text-emerald-950"
+                : "border-emerald-400/20 bg-emerald-500/10 text-emerald-100"
+            )}>
+              <p className={clsx("text-sm font-medium", isLight ? "text-emerald-900" : "text-emerald-100")}>
+                {success.message}
+              </p>
+              {success.verificationUrl ? (
+                <a
+                  className={clsx("mt-2 inline-block text-sm underline", isLight ? "text-emerald-800" : "text-emerald-200")}
+                  href={success.verificationUrl}
+                >
+                  Verify now
+                </a>
+              ) : (
+                <p className={clsx("mt-2 text-xs", isLight ? "text-emerald-800/80" : "text-emerald-200/80")}>
+                  Check your inbox/spam for the verification link.
+                </p>
+              )}
+
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => navigate("/login", { replace: true })}
+                  className={clsx(
+                    "rounded-xl border px-4 py-2 text-sm font-medium transition",
+                    isLight
+                      ? "border-emerald-900/15 bg-white text-emerald-900 hover:bg-emerald-50"
+                      : "border-emerald-200/20 bg-white/10 text-emerald-100 hover:bg-white/15"
+                  )}
+                >
+                  Go to login
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <form
             onSubmit={(e) => {

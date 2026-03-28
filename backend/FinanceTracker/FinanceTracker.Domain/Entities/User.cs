@@ -12,6 +12,12 @@ public class User
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    // Defaulted to true at DB level to avoid breaking existing accounts.
+    // New registrations explicitly set this to false and require verification.
+    public bool IsEmailVerified { get; set; } = true;
+
+    public DateTime? EmailVerifiedAt { get; set; }
+
     public ICollection<Budget> Budgets { get; set; } = new List<Budget>();
 
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();

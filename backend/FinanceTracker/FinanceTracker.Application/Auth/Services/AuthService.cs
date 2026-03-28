@@ -2,10 +2,12 @@ using System.Net.Mail;
 using FinanceTracker.Application.Auth.Commands;
 using FinanceTracker.Application.Auth.DTOs;
 using FinanceTracker.Application.Categories.Services;
+using FinanceTracker.Application.Notifications;
 using FinanceTracker.Application.Security;
 using FinanceTracker.Domain.Entities;
 using FinanceTracker.Domain.Exceptions;
 using FinanceTracker.Domain.Interfaces;
+using Microsoft.Extensions.Configuration;
 
 namespace FinanceTracker.Application.Auth.Services;
 
@@ -16,22 +18,31 @@ public class AuthService : IAuthService
     private readonly IRefreshTokenRepository _refreshTokenRepository;
     private readonly ICategoryService _categoryService;
     private readonly IPasswordResetTokenRepository _passwordResetTokenRepository;
+    private readonly IEmailVerificationTokenRepository _emailVerificationTokenRepository;
+    private readonly IEmailSender _emailSender;
+    private readonly IConfiguration _configuration;
 
     public AuthService(
         IUserRepository userRepository,
         ITokenService tokenService,
         IRefreshTokenRepository refreshTokenRepository,
         ICategoryService categoryService,
-        IPasswordResetTokenRepository passwordResetTokenRepository)
+        IPasswordResetTokenRepository passwordResetTokenRepository,
+        IEmailVerificationTokenRepository emailVerificationTokenRepository,
+        IEmailSender emailSender,
+        IConfiguration configuration)
     {
         _userRepository = userRepository;
         _tokenService = tokenService;
         _refreshTokenRepository = refreshTokenRepository;
         _categoryService = categoryService;
         _passwordResetTokenRepository = passwordResetTokenRepository;
+        _emailVerificationTokenRepository = emailVerificationTokenRepository;
+        _emailSender = emailSender;
+        _configuration = configuration;
     }
 
-    public async Task RegisterAsync(RegisterUserCommand command)
+    public async Task<RegisterResponseDto> RegisterAsync(RegisterUserCommand command)
     {
         var email = command.Email?.Trim() ?? string.Empty;
         var password = command.Password ?? string.Empty;
@@ -56,13 +67,41 @@ public class AuthService : IAuthService
             Email = email,
             PasswordHash = PasswordHasher.Hash(password),
             DisplayName = displayName,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            IsEmailVerified = false,
+            EmailVerifiedAt = null
         };
 
         await _userRepository.AddAsync(user);
         await _userRepository.SaveChangesAsync();
 
         await _categoryService.SeedDefaultsAsync(user.Id);
+
+        var verificationToken = Guid.NewGuid().ToString("N");
+        var verify = new EmailVerificationToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            Token = verificationToken,
+            ExpiresAt = DateTime.UtcNow.AddHours(24),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _emailVerificationTokenRepository.AddAsync(verify);
+        await _emailVerificationTokenRepository.SaveChangesAsync();
+
+        var verificationUrl = BuildVerificationUrl(verificationToken);
+        var emailSent = await _emailSender.TrySendAsync(
+            user.Email,
+            "Verify your Argus account",
+            BuildVerificationEmailHtml(verificationUrl));
+
+        return new RegisterResponseDto
+        {
+            Message = "Verification email sent. Please verify your email to activate your Argus account.",
+            EmailSent = emailSent,
+            VerificationUrl = emailSent ? null : verificationUrl
+        };
     }
 
     public async Task<AuthResponse> LoginAsync(LoginCommand command)
@@ -77,6 +116,9 @@ public class AuthService : IAuthService
 
         if (user == null || !PasswordHasher.Verify(password, user.PasswordHash))
             throw new DomainException("Invalid email or password.");
+
+        if (!user.IsEmailVerified)
+            throw new DomainException("Please verify your email to activate your Argus account.");
 
         var accessToken = _tokenService.GenerateAccessToken(user);
         var refreshToken = _tokenService.GenerateRefreshToken(user.Id);
@@ -184,6 +226,110 @@ public class AuthService : IAuthService
 
         await _userRepository.SaveChangesAsync();
         await _passwordResetTokenRepository.SaveChangesAsync();
+    }
+
+    public async Task<VerifyEmailResponseDto> VerifyEmailAsync(string token)
+    {
+        var trimmed = token?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(trimmed))
+            throw new DomainException("Verification token is required.");
+
+        var record = await _emailVerificationTokenRepository.GetByTokenAsync(trimmed);
+        if (record is null || record.UsedAt != null || record.ExpiresAt < DateTime.UtcNow)
+            throw new DomainException("Invalid or expired verification token.");
+
+        var user = await _userRepository.GetByIdAsync(record.UserId);
+        if (user is null)
+            throw new DomainException("User not found.");
+
+        if (!user.IsEmailVerified)
+        {
+            user.IsEmailVerified = true;
+            user.EmailVerifiedAt = DateTime.UtcNow;
+        }
+
+        record.UsedAt = DateTime.UtcNow;
+
+        await _userRepository.SaveChangesAsync();
+        await _emailVerificationTokenRepository.SaveChangesAsync();
+
+        return new VerifyEmailResponseDto
+        {
+            Verified = true,
+            Message = "Email verified successfully. You can log in now."
+        };
+    }
+
+    public async Task<ResendVerificationResponseDto> ResendVerificationAsync(string email)
+    {
+        var trimmedEmail = email?.Trim() ?? string.Empty;
+        if (!IsValidEmail(trimmedEmail))
+            throw new DomainException("A valid email address is required.");
+
+        var user = await _userRepository.GetByEmailAsync(trimmedEmail);
+        if (user is null || user.IsEmailVerified)
+        {
+            return new ResendVerificationResponseDto
+            {
+                Message = "If the account exists, a verification email has been sent.",
+                EmailSent = true
+            };
+        }
+
+        var verificationToken = Guid.NewGuid().ToString("N");
+        var verify = new EmailVerificationToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            Token = verificationToken,
+            ExpiresAt = DateTime.UtcNow.AddHours(24),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _emailVerificationTokenRepository.AddAsync(verify);
+        await _emailVerificationTokenRepository.SaveChangesAsync();
+
+        var verificationUrl = BuildVerificationUrl(verificationToken);
+        var emailSent = await _emailSender.TrySendAsync(
+            user.Email,
+            "Verify your Argus account",
+            BuildVerificationEmailHtml(verificationUrl));
+
+        return new ResendVerificationResponseDto
+        {
+            Message = "If the account exists, a verification email has been sent.",
+            EmailSent = emailSent,
+            VerificationUrl = emailSent ? null : verificationUrl
+        };
+    }
+
+    private string BuildVerificationUrl(string token)
+    {
+        var baseUrl =
+            _configuration["Frontend:BaseUrl"] ??
+            _configuration["FrontendBaseUrl"] ??
+            "http://localhost:5173";
+
+        baseUrl = baseUrl.TrimEnd('/');
+        return $"{baseUrl}/verify-email?token={Uri.EscapeDataString(token)}";
+    }
+
+    private static string BuildVerificationEmailHtml(string verificationUrl)
+    {
+        return $"""
+            <div style="font-family:Arial,sans-serif;line-height:1.5">
+              <h2>Verify your Argus account</h2>
+              <p>Click the button below to verify your email address and activate your account.</p>
+              <p style="margin:24px 0">
+                <a href="{verificationUrl}" style="background:#22d3ee;color:#0b1220;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:600">
+                  Verify email
+                </a>
+              </p>
+              <p>If the button doesn’t work, open this link:</p>
+              <p><a href="{verificationUrl}">{verificationUrl}</a></p>
+              <p style="color:#64748b;font-size:12px;margin-top:24px">This link expires in 24 hours.</p>
+            </div>
+            """;
     }
 
     private static bool IsValidEmail(string email)

@@ -5,7 +5,7 @@ using FinanceTracker.Application.Auth.DTOs;
 
 public interface IAuthService
 {
-    Task RegisterAsync(RegisterUserCommand command);
+    Task<RegisterResponseDto> RegisterAsync(RegisterUserCommand command);
 
     Task<AuthResponse> LoginAsync(LoginCommand command);
 
@@ -14,4 +14,8 @@ public interface IAuthService
     Task<ForgotPasswordResponse> ForgotPasswordAsync(ForgotPasswordCommand command);
 
     Task ResetPasswordAsync(ResetPasswordCommand command);
+
+    Task<VerifyEmailResponseDto> VerifyEmailAsync(string token);
+
+    Task<ResendVerificationResponseDto> ResendVerificationAsync(string email);
 }

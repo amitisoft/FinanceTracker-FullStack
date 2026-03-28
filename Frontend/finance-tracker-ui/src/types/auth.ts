@@ -18,3 +18,20 @@ export type AuthResponse = {
 export type RefreshRequest = {
   refreshToken: string;
 };
+
+export type RegisterResponse = {
+  message: string;
+  emailSent: boolean;
+  verificationUrl?: string | null;
+};
+
+export type VerifyEmailResponse = {
+  verified: boolean;
+  message: string;
+};
+
+export type ResendVerificationResponse = {
+  message: string;
+  emailSent: boolean;
+  verificationUrl?: string | null;
+};

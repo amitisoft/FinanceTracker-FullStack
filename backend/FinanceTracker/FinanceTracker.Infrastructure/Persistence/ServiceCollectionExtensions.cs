@@ -5,6 +5,7 @@ using FinanceTracker.Application.Categories.Services;
 using FinanceTracker.Application.Dashboard.Services;
 using FinanceTracker.Application.Demo.Services;
 using FinanceTracker.Application.Goals.Services;
+using FinanceTracker.Application.Notifications;
 using FinanceTracker.Application.Recurring.Services;
 using FinanceTracker.Application.Reports.Services;
 using FinanceTracker.Application.Transactions.Services;
@@ -38,6 +39,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBudgetRepository, BudgetRepository>();
         services.AddScoped<IRuleRepository, RuleRepository>();
         services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
+        services.AddScoped<IEmailVerificationTokenRepository, EmailVerificationTokenRepository>();
         services.AddScoped<IAccountMemberRepository, AccountMemberRepository>();
         services.AddScoped<IAccountInviteRepository, AccountInviteRepository>();
         services.AddScoped<IAccountActivityRepository, AccountActivityRepository>();
@@ -45,6 +47,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IForecastService, ForecastService>();
 
         services.AddScoped<ITokenService, TokenService>();
+        services.AddScoped<IEmailSender, SmtpEmailSender>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IAccountService, AccountService>();
         services.AddScoped<IAccountSharingService, AccountSharingService>();

@@ -138,7 +138,7 @@ public class DemoSeedService : IDemoSeedService
         var transportCategoryId = GetCategoryId("Transport", "expense");
         var rule = await _ruleService.CreateAsync(userId, new UpsertRuleCommand
         {
-            Name = "Auto categorize Uber",
+            Name = $"{DemoPrefix}Auto categorize Uber",
             Field = "merchant",
             Operator = "contains",
             Value = "Uber",
@@ -158,6 +158,12 @@ public class DemoSeedService : IDemoSeedService
         })
         {
             var categoryId = GetCategoryId(cat, "expense");
+
+            // Do not overwrite the user's real budgets; skip if a budget already exists.
+            var existingBudget = await _budgetRepository.GetByCategoryMonthYearAsync(userId, categoryId, month, year);
+            if (existingBudget is not null)
+                continue;
+
             var budget = await _budgetService.CreateAsync(userId, new CreateBudgetCommand
             {
                 CategoryId = categoryId,

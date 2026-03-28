@@ -24,6 +24,7 @@ public class FinanceTrackerDbContext : DbContext
     public DbSet<AccountActivity> AccountActivities => Set<AccountActivity>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<DemoSeedState> DemoSeedStates => Set<DemoSeedState>();
+    public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -215,6 +216,23 @@ public class FinanceTrackerDbContext : DbContext
         });
 
         modelBuilder.Entity<PasswordResetToken>(entity =>
+        {
+            entity.Property(t => t.Token).HasMaxLength(120).IsRequired();
+            entity.HasIndex(t => t.Token).IsUnique();
+
+            entity.HasOne(t => t.User)
+                .WithMany()
+                .HasForeignKey(t => t.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.Property(u => u.Email).HasMaxLength(200).IsRequired();
+            entity.Property(u => u.IsEmailVerified).HasDefaultValue(true);
+        });
+
+        modelBuilder.Entity<EmailVerificationToken>(entity =>
         {
             entity.Property(t => t.Token).HasMaxLength(120).IsRequired();
             entity.HasIndex(t => t.Token).IsUnique();

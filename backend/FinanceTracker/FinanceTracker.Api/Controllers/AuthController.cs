@@ -21,12 +21,26 @@ public class AuthController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Register([FromBody] RegisterUserCommand command)
     {
-        await _authService.RegisterAsync(command);
+        var result = await _authService.RegisterAsync(command);
+        return Ok(result);
+    }
 
-        return Ok(new
-        {
-            message = "User registered successfully."
-        });
+    [HttpGet("verify-email")]
+    [ProducesResponseType(typeof(VerifyEmailResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> VerifyEmail([FromQuery] string token)
+    {
+        var result = await _authService.VerifyEmailAsync(token);
+        return Ok(result);
+    }
+
+    [HttpPost("resend-verification")]
+    [ProducesResponseType(typeof(ResendVerificationResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ResendVerification([FromBody] ResendVerificationCommand command)
+    {
+        var result = await _authService.ResendVerificationAsync(command.Email);
+        return Ok(result);
     }
 
     [HttpPost("login")]

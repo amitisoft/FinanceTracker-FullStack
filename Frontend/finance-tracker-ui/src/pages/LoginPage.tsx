@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { login } from "../features/auth/authApi";
+import { login, resendVerification } from "../features/auth/authApi";
 import { authStore } from "../store/authStore";
 import { getApiErrorMessage } from "../lib/getApiErrorMessage";
 import { useNavigate, Link } from "react-router-dom";
@@ -36,6 +36,8 @@ export default function LoginPage() {
   const [form, setForm] = useState<LoginFormState>({ ...DEFAULT_VALUES });
   const [errors, setErrors] = useState<LoginFormErrors>({});
   const [authShapeError, setAuthShapeError] = useState("");
+  const [resendMessage, setResendMessage] = useState("");
+  const [resendUrl, setResendUrl] = useState<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: login,
@@ -69,6 +71,18 @@ export default function LoginPage() {
     },
   });
 
+  const resendMutation = useMutation({
+    mutationFn: (email: string) => resendVerification(email),
+    onSuccess: (data) => {
+      setResendMessage(data?.message ?? "Verification email sent.");
+      setResendUrl(data?.verificationUrl ?? null);
+    },
+  });
+
+  const loginErrorMessage =
+    authShapeError || (mutation.isError ? getApiErrorMessage(mutation.error, "Login failed.") : "");
+  const needsVerification = loginErrorMessage.toLowerCase().includes("verify your email");
+
   function setField<K extends keyof LoginFormState>(
     key: K,
     value: LoginFormState[K]
@@ -76,6 +90,8 @@ export default function LoginPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
     setErrors((prev) => ({ ...prev, [key]: undefined }));
     setAuthShapeError("");
+    setResendMessage("");
+    setResendUrl(null);
   }
 
   function validateForm(values: LoginFormState): LoginFormErrors {
@@ -101,6 +117,8 @@ export default function LoginPage() {
     const nextErrors = validateForm(form);
     setErrors(nextErrors);
     setAuthShapeError("");
+    setResendMessage("");
+    setResendUrl(null);
 
     if (Object.keys(nextErrors).length > 0) {
       return;
@@ -246,11 +264,41 @@ export default function LoginPage() {
             {(mutation.isError || authShapeError) && (
               <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3">
                 <p className="text-sm font-medium text-rose-200">
-                  {authShapeError ||
-                    getApiErrorMessage(mutation.error, "Login failed.")}
+                  {loginErrorMessage}
                 </p>
               </div>
             )}
+
+            {needsVerification && form.email.trim() ? (
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm text-white/70">Didn’t get the verification email?</p>
+                  <button
+                    type="button"
+                    disabled={resendMutation.isPending}
+                    onClick={() => {
+                      setResendMessage("");
+                      setResendUrl(null);
+                      resendMutation.mutate(form.email.trim());
+                    }}
+                    className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs font-medium text-white/80 transition hover:bg-white/15 disabled:opacity-50"
+                  >
+                    {resendMutation.isPending ? "Sending..." : "Resend link"}
+                  </button>
+                </div>
+
+                {resendMessage ? (
+                  <div className="mt-3 text-xs text-white/65">
+                    <p>{resendMessage}</p>
+                    {resendUrl ? (
+                      <a className="mt-1 inline-block underline" href={resendUrl}>
+                        Open verification link
+                      </a>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="pt-2">
               <IntentCapsule
