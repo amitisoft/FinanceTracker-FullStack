@@ -108,6 +108,31 @@ public class AccountsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("invites/pending")]
+    [ProducesResponseType(typeof(IReadOnlyList<PendingAccountInviteDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetPendingInvites()
+    {
+        if (!TryGetUserId(out var userId))
+            return UnauthorizedProblem();
+
+        var result = await _accountSharingService.GetPendingInvitesAsync(userId);
+        return Ok(result);
+    }
+
+    [HttpPost("{id:guid}/invites/accept")]
+    [ProducesResponseType(typeof(AccountMemberDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> AcceptInvite(Guid id)
+    {
+        if (!TryGetUserId(out var userId))
+            return UnauthorizedProblem();
+
+        var result = await _accountSharingService.AcceptInviteAsync(userId, id);
+        return Ok(result);
+    }
+
     [HttpPut("{id:guid}/members/{memberUserId:guid}")]
     [ProducesResponseType(typeof(AccountMemberDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]

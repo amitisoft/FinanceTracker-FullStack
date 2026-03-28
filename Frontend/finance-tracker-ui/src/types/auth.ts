@@ -14,3 +14,7 @@ export type AuthResponse = {
   refreshToken: string;
   expiresAt: string;
 };
+
+export type RefreshRequest = {
+  refreshToken: string;
+};

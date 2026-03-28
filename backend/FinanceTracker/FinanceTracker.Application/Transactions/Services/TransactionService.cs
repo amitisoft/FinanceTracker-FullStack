@@ -133,7 +133,54 @@ public class TransactionService : ITransactionService
     public async Task<IReadOnlyList<TransactionDto>> GetAllAsync(Guid userId, GetTransactionsQuery query)
     {
         var transactions = await _transactionRepository.GetAllByUserIdAsync(userId);
-        return transactions.Select(Map).ToList();
+        var filtered = transactions.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(query.Type))
+        {
+            var type = query.Type.Trim().ToLowerInvariant();
+            filtered = filtered.Where(t => t.Type.Equals(type, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (query.AccountId.HasValue)
+            filtered = filtered.Where(t => t.AccountId == query.AccountId.Value);
+
+        if (query.CategoryId.HasValue)
+            filtered = filtered.Where(t => t.CategoryId == query.CategoryId.Value);
+
+        if (query.DateFrom.HasValue)
+            filtered = filtered.Where(t => t.TransactionDate.Date >= query.DateFrom.Value.Date);
+
+        if (query.DateTo.HasValue)
+            filtered = filtered.Where(t => t.TransactionDate.Date <= query.DateTo.Value.Date);
+
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim();
+            filtered = filtered.Where(t =>
+                (!string.IsNullOrWhiteSpace(t.Merchant) && t.Merchant.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrWhiteSpace(t.Note) && t.Note.Contains(search, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        var sortBy = query.SortBy?.Trim().ToLowerInvariant() ?? "date";
+        var sortDir = query.SortDir?.Trim().ToLowerInvariant() ?? "desc";
+        var descending = sortDir != "asc";
+
+        filtered = sortBy switch
+        {
+            "amount" => descending ? filtered.OrderByDescending(t => t.Amount) : filtered.OrderBy(t => t.Amount),
+            "created" => descending ? filtered.OrderByDescending(t => t.CreatedAt) : filtered.OrderBy(t => t.CreatedAt),
+            _ => descending ? filtered.OrderByDescending(t => t.TransactionDate) : filtered.OrderBy(t => t.TransactionDate)
+        };
+
+        var pageSize = query.PageSize <= 0 ? 20 : Math.Clamp(query.PageSize, 5, 100);
+        var page = query.Page <= 0 ? 1 : query.Page;
+        var skip = (page - 1) * pageSize;
+
+        return filtered
+            .Skip(skip)
+            .Take(pageSize)
+            .Select(Map)
+            .ToList();
     }
 
     public async Task<TransactionDto?> GetByIdAsync(Guid userId, GetTransactionByIdQuery query)

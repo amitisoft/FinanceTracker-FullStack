@@ -20,7 +20,7 @@ public class DashboardSummaryDto
 
     public IReadOnlyList<RecentTransactionDto> RecentTransactions { get; set; } = [];
 
-    public IReadOnlyList<object> GoalsSummary { get; set; } = [];
+    public IReadOnlyList<GoalSummaryDto> GoalsSummary { get; set; } = [];
 
-    public IReadOnlyList<object> UpcomingRecurring { get; set; } = [];
+    public IReadOnlyList<UpcomingRecurringDto> UpcomingRecurring { get; set; } = [];
 }

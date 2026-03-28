@@ -27,6 +27,31 @@ public class AccountInviteRepository : IAccountInviteRepository
             .ToListAsync();
     }
 
+    public async Task<AccountInvite?> GetPendingByAccountAndEmailAsync(Guid accountId, string email)
+    {
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        var now = DateTime.UtcNow;
+
+        return await _db.AccountInvites
+            .FirstOrDefaultAsync(i =>
+                i.AccountId == accountId &&
+                i.Email == normalizedEmail &&
+                i.Status == "pending" &&
+                i.ExpiresAt > now);
+    }
+
+    public async Task<IReadOnlyList<AccountInvite>> GetPendingByEmailAsync(string email)
+    {
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        var now = DateTime.UtcNow;
+
+        return await _db.AccountInvites
+            .Include(i => i.Account)
+            .Where(i => i.Email == normalizedEmail && i.Status == "pending" && i.ExpiresAt > now)
+            .OrderByDescending(i => i.CreatedAt)
+            .ToListAsync();
+    }
+
     public async Task SaveChangesAsync()
     {
         await _db.SaveChangesAsync();

@@ -4,15 +4,23 @@ import AppShell from "../components/AppShell";
 import GlassCard from "../components/Glasscard";
 import NeonInput from "../components/NeonInput";
 import { getAccounts } from "../features/accounts/accountApi";
-import { getAccountMembers, inviteAccountMember, updateAccountMember } from "../features/sharing/sharingApi";
+import { acceptInvite, getAccountMembers, getPendingInvites, inviteAccountMember, updateAccountMember } from "../features/sharing/sharingApi";
+import { authStore } from "../store/authStore";
+import { decodeJwt } from "../utils/jwt";
 
 export default function SharedAccountsPage() {
   const queryClient = useQueryClient();
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("viewer");
+  const accessToken = authStore((s) => s.accessToken);
+  const jwt = decodeJwt(accessToken);
+  const currentUserId = jwt?.sub ?? "";
 
   const { data: accounts } = useQuery({ queryKey: ["accounts"], queryFn: getAccounts });
+  const selectedAccount = accounts?.find((a) => a.id === selectedAccountId);
+  const isOwner = !!selectedAccount && currentUserId && selectedAccount.ownerUserId === currentUserId;
+  const { data: pendingInvites } = useQuery({ queryKey: ["pending-invites"], queryFn: getPendingInvites });
 
   const { data: members } = useQuery({
     queryKey: ["account-members", selectedAccountId],
@@ -22,13 +30,27 @@ export default function SharedAccountsPage() {
 
   const inviteMutation = useMutation({
     mutationFn: () => inviteAccountMember(selectedAccountId, { email: inviteEmail, role: inviteRole }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["account-members", selectedAccountId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["account-members", selectedAccountId] });
+      queryClient.invalidateQueries({ queryKey: ["pending-invites"] });
+      setInviteEmail("");
+      setInviteRole("viewer");
+    },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ userId, role, isActive }: { userId: string; role: string; isActive: boolean }) =>
       updateAccountMember(selectedAccountId, userId, { role, isActive }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["account-members", selectedAccountId] }),
+  });
+
+  const acceptMutation = useMutation({
+    mutationFn: (accountId: string) => acceptInvite(accountId),
+    onSuccess: (_data, accountId) => {
+      queryClient.invalidateQueries({ queryKey: ["pending-invites"] });
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["account-members", accountId] });
+    },
   });
 
   const canInvite = useMemo(() => selectedAccountId && inviteEmail.trim(), [selectedAccountId, inviteEmail]);
@@ -59,7 +81,8 @@ export default function SharedAccountsPage() {
         </GlassCard>
 
         <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
-          <GlassCard className="p-5">
+          <div className="space-y-4">
+            <GlassCard className="p-5">
             <h3 className="mb-4 text-lg font-semibold text-white">Invite member</h3>
             <NeonInput
               label="Email"
@@ -85,7 +108,33 @@ export default function SharedAccountsPage() {
             >
               {inviteMutation.isPending ? "Inviting..." : "Send invite"}
             </button>
-          </GlassCard>
+            </GlassCard>
+
+            <GlassCard className="p-5">
+              <h3 className="mb-4 text-lg font-semibold text-white">Pending invites</h3>
+              {(pendingInvites?.length ?? 0) === 0 ? (
+                <p className="text-sm text-white/55">No pending invites for your account.</p>
+              ) : (
+                <div className="space-y-3">
+                  {pendingInvites?.map((invite) => (
+                    <div key={invite.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/6 px-4 py-3">
+                      <div>
+                        <p className="text-sm text-white">{invite.accountName}</p>
+                        <p className="text-xs text-white/50">Role: {invite.role}</p>
+                      </div>
+                      <button
+                        className="rounded-xl bg-white/12 px-3 py-1 text-xs text-white disabled:opacity-50"
+                        onClick={() => acceptMutation.mutate(invite.accountId)}
+                        disabled={acceptMutation.isPending}
+                      >
+                        {acceptMutation.isPending ? "Accepting..." : "Accept"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </GlassCard>
+          </div>
 
           <GlassCard className="p-5">
             <h3 className="mb-4 text-lg font-semibold text-white">Members</h3>
@@ -98,21 +147,26 @@ export default function SharedAccountsPage() {
                 {members?.map((m) => (
                   <div key={m.userId} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/6 px-4 py-3">
                     <div>
-                      <p className="text-white text-sm">{m.userId}</p>
+                      <p className="text-white text-sm">
+                        {m.displayName || m.email || m.userId}
+                        {m.isOwner ? " (Owner)" : ""}
+                      </p>
                       <p className="text-xs text-white/50">{m.isActive ? "Active" : "Inactive"}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <select
-                        className="rounded-xl border border-white/10 bg-white/10 px-2 py-1 text-xs text-white"
+                        className="rounded-xl border border-white/10 bg-white/10 px-2 py-1 text-xs text-white disabled:opacity-50"
                         value={m.role}
                         onChange={(e) => updateMutation.mutate({ userId: m.userId, role: e.target.value, isActive: m.isActive })}
+                        disabled={!isOwner || m.isOwner}
                       >
                         <option value="editor" className="text-black">Editor</option>
                         <option value="viewer" className="text-black">Viewer</option>
                       </select>
                       <button
-                        className="rounded-xl border border-white/10 px-3 py-1 text-xs text-white/70"
+                        className="rounded-xl border border-white/10 px-3 py-1 text-xs text-white/70 disabled:opacity-50"
                         onClick={() => updateMutation.mutate({ userId: m.userId, role: m.role, isActive: !m.isActive })}
+                        disabled={!isOwner || m.isOwner}
                       >
                         {m.isActive ? "Disable" : "Enable"}
                       </button>

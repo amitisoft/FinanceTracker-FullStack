@@ -1,5 +1,5 @@
 import { api } from "../../api/client";
-import type { AuthResponse, LoginRequest, RegisterRequest } from "../../types/auth";
+import type { AuthResponse, LoginRequest, RefreshRequest, RegisterRequest } from "../../types/auth";
 
 export const login = async (payload: LoginRequest) => {
   const response = await api.post<AuthResponse>("/api/auth/login", payload);
@@ -8,5 +8,10 @@ export const login = async (payload: LoginRequest) => {
 
 export const register = async (payload: RegisterRequest) => {
   const response = await api.post("/api/auth/register", payload);
+  return response.data;
+};
+
+export const refreshAuth = async (payload: RefreshRequest) => {
+  const response = await api.post<AuthResponse>("/api/auth/refresh", payload);
   return response.data;
 };

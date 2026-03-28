@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getAccounts, createAccount } from "../features/accounts/accountApi";
+import { getAccounts, createAccount, transferFunds } from "../features/accounts/accountApi";
 import GlassCard from "../components/Glasscard";
 import NeonInput from "../components/NeonInput";
 import { getApiErrorMessage } from "../lib/getApiErrorMessage";
@@ -25,6 +25,24 @@ const DEFAULT_VALUES: AccountFormState = {
   institutionName: "",
 };
 
+type TransferFormState = {
+  sourceAccountId: string;
+  destinationAccountId: string;
+  amount: string;
+  date: string;
+};
+
+type TransferFormErrors = Partial<Record<keyof TransferFormState, string>>;
+
+const todayStr = new Date().toISOString().slice(0, 10);
+
+const DEFAULT_TRANSFER: TransferFormState = {
+  sourceAccountId: "",
+  destinationAccountId: "",
+  amount: "",
+  date: todayStr,
+};
+
 function isValidMoneyString(value: string) {
   if (value.trim() === "") return false;
   const num = Number(value);
@@ -41,6 +59,8 @@ export default function AccountsPage() {
 
   const [form, setForm] = useState<AccountFormState>(DEFAULT_VALUES);
   const [errors, setErrors] = useState<AccountFormErrors>({});
+  const [transferForm, setTransferForm] = useState<TransferFormState>({ ...DEFAULT_TRANSFER });
+  const [transferErrors, setTransferErrors] = useState<TransferFormErrors>({});
 
   const mutation = useMutation({
     mutationFn: createAccount,
@@ -52,8 +72,19 @@ export default function AccountsPage() {
     },
   });
 
+  const transferMutation = useMutation({
+    mutationFn: transferFunds,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      setTransferForm({ ...DEFAULT_TRANSFER });
+      setTransferErrors({});
+    },
+  });
+
   const isSubmitting = mutation.isPending;
   const canSubmit = useMemo(() => !isSubmitting, [isSubmitting]);
+  const isTransferring = transferMutation.isPending;
 
   function setField<K extends keyof AccountFormState>(
     key: K,
@@ -103,6 +134,41 @@ export default function AccountsPage() {
     return nextErrors;
   }
 
+  function setTransferField<K extends keyof TransferFormState>(
+    key: K,
+    value: TransferFormState[K]
+  ) {
+    setTransferForm((prev) => ({ ...prev, [key]: value }));
+    setTransferErrors((prev) => ({ ...prev, [key]: undefined }));
+  }
+
+  function validateTransfer(values: TransferFormState): TransferFormErrors {
+    const nextErrors: TransferFormErrors = {};
+
+    if (!values.sourceAccountId) nextErrors.sourceAccountId = "Source is required";
+    if (!values.destinationAccountId) nextErrors.destinationAccountId = "Destination is required";
+    if (
+      values.sourceAccountId &&
+      values.destinationAccountId &&
+      values.sourceAccountId === values.destinationAccountId
+    ) {
+      nextErrors.destinationAccountId = "Must be different accounts";
+    }
+
+    if (values.amount.trim() === "") {
+      nextErrors.amount = "Amount is required";
+    } else {
+      const num = Number(values.amount);
+      if (!Number.isFinite(num) || num <= 0 || Math.round(num * 100) !== num * 100) {
+        nextErrors.amount = "Amount must be > 0, up to 2 decimals";
+      }
+    }
+
+    if (!values.date) nextErrors.date = "Date is required";
+
+    return nextErrors;
+  }
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
@@ -119,6 +185,21 @@ export default function AccountsPage() {
     });
   }
 
+  function handleTransferSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+
+    const nextErrors = validateTransfer(transferForm);
+    setTransferErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+
+    transferMutation.mutate({
+      sourceAccountId: transferForm.sourceAccountId,
+      destinationAccountId: transferForm.destinationAccountId,
+      amount: Number(transferForm.amount),
+      date: `${transferForm.date}T00:00:00Z`,
+    });
+  }
+
   return (
     <AppShell title="Accounts">
       <div className="space-y-4 p-3 sm:space-y-6 sm:p-4">
@@ -132,6 +213,7 @@ export default function AccountsPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-[380px_1fr]">
+          <div className="space-y-4">
           <GlassCard className="p-4 sm:p-6">
             <h3 className="mb-5 text-lg font-semibold text-white">
               Create account
@@ -205,6 +287,86 @@ export default function AccountsPage() {
               </button>
             </form>
           </GlassCard>
+
+          <GlassCard className="p-4 sm:p-6">
+            <h3 className="mb-5 text-lg font-semibold text-white">Transfer funds</h3>
+
+            <form onSubmit={handleTransferSubmit} className="space-y-4" noValidate>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-white/80">From</label>
+                <select
+                  value={transferForm.sourceAccountId}
+                  onChange={(e) => setTransferField("sourceAccountId", e.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-4 text-white outline-none"
+                >
+                  <option value="" className="text-black">Select source</option>
+                  {data?.map((a: any) => (
+                    <option key={a.id} value={a.id} className="text-black">
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+                {transferErrors.sourceAccountId ? (
+                  <p className="text-sm text-rose-300">{transferErrors.sourceAccountId}</p>
+                ) : null}
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-white/80">To</label>
+                <select
+                  value={transferForm.destinationAccountId}
+                  onChange={(e) => setTransferField("destinationAccountId", e.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-4 text-white outline-none"
+                >
+                  <option value="" className="text-black">Select destination</option>
+                  {data?.map((a: any) => (
+                    <option key={a.id} value={a.id} className="text-black">
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+                {transferErrors.destinationAccountId ? (
+                  <p className="text-sm text-rose-300">{transferErrors.destinationAccountId}</p>
+                ) : null}
+              </div>
+
+              <NeonInput
+                label="Amount"
+                type="number"
+                step="0.01"
+                min="0.01"
+                inputMode="decimal"
+                value={transferForm.amount}
+                onChange={(e) => setTransferField("amount", e.target.value)}
+                error={transferErrors.amount}
+              />
+
+              <NeonInput
+                label="Date"
+                type="date"
+                value={transferForm.date}
+                onChange={(e) => setTransferField("date", e.target.value)}
+                error={transferErrors.date}
+              />
+
+              {transferMutation.isError && (
+                <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3">
+                  <p className="text-sm font-medium text-rose-200">
+                    {getApiErrorMessage(transferMutation.error, "Transfer failed.")}
+                  </p>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isTransferring}
+                className="w-full rounded-2xl bg-white/12 px-4 py-4 text-white transition hover:bg-white/16 disabled:opacity-50"
+              >
+                {isTransferring ? "Transferring..." : "Transfer"}
+              </button>
+            </form>
+          </GlassCard>
+          </div>
 
           <GlassCard className="p-4 sm:p-6">
             <h3 className="mb-5 text-lg font-semibold text-white">

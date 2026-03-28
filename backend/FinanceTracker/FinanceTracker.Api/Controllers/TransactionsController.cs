@@ -38,12 +38,12 @@ public class TransactionsController : ControllerBase
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<TransactionDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> GetAll()
+    public async Task<IActionResult> GetAll([FromQuery] GetTransactionsQuery query)
     {
         if (!TryGetUserId(out var userId))
             return UnauthorizedProblem();
 
-        var result = await _transactionService.GetAllAsync(userId, new GetTransactionsQuery());
+        var result = await _transactionService.GetAllAsync(userId, query);
 
         return Ok(result);
     }

@@ -19,11 +19,16 @@ public class AccountService : IAccountService
 
     private readonly IAccountRepository _accountRepository;
     private readonly IAccountMemberRepository _memberRepository;
+    private readonly IAccountActivityRepository _activityRepository;
 
-    public AccountService(IAccountRepository accountRepository, IAccountMemberRepository memberRepository)
+    public AccountService(
+        IAccountRepository accountRepository,
+        IAccountMemberRepository memberRepository,
+        IAccountActivityRepository activityRepository)
     {
         _accountRepository = accountRepository;
         _memberRepository = memberRepository;
+        _activityRepository = activityRepository;
     }
 
     public async Task<AccountDto> CreateAsync(Guid userId, CreateAccountCommand command)
@@ -134,6 +139,28 @@ public class AccountService : IAccountService
         destination.CurrentBalance += command.Amount;
         destination.LastUpdatedAt = DateTime.UtcNow;
 
+        var now = DateTime.UtcNow;
+        await _activityRepository.AddAsync(new AccountActivity
+        {
+            Id = Guid.NewGuid(),
+            AccountId = source.Id,
+            UserId = userId,
+            Action = "transfer_out",
+            EntityType = "transfer",
+            EntityId = source.Id,
+            CreatedAt = now
+        });
+        await _activityRepository.AddAsync(new AccountActivity
+        {
+            Id = Guid.NewGuid(),
+            AccountId = destination.Id,
+            UserId = userId,
+            Action = "transfer_in",
+            EntityType = "transfer",
+            EntityId = destination.Id,
+            CreatedAt = now
+        });
+
         await _accountRepository.SaveChangesAsync();
 
         return new TransferResultDto
@@ -152,6 +179,7 @@ public class AccountService : IAccountService
         return new AccountDto
         {
             Id = account.Id,
+            OwnerUserId = account.UserId,
             Name = account.Name,
             Type = account.Type,
             OpeningBalance = account.OpeningBalance,

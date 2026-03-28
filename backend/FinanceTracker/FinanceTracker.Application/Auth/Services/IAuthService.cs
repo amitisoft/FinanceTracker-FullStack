@@ -8,4 +8,10 @@ public interface IAuthService
     Task RegisterAsync(RegisterUserCommand command);
 
     Task<AuthResponse> LoginAsync(LoginCommand command);
+
+    Task<AuthResponse> RefreshAsync(RefreshTokenCommand command);
+
+    Task<ForgotPasswordResponse> ForgotPasswordAsync(ForgotPasswordCommand command);
+
+    Task ResetPasswordAsync(ResetPasswordCommand command);
 }

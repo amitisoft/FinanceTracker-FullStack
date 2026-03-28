@@ -25,6 +25,20 @@ export type CreateRecurringRequest = {
   autoCreateTransaction: boolean;
 };
 
+export type UpdateRecurringRequest = {
+  title: string;
+  type: string;
+  amount: number;
+  categoryId?: string | null;
+  accountId?: string | null;
+  frequency: string;
+  startDate: string;
+  endDate?: string | null;
+  nextRunDate: string;
+  autoCreateTransaction: boolean;
+  isPaused: boolean;
+};
+
 export type RecurringProcessResult = {
   processedCount: number;
   createdTransactionIds: string[];

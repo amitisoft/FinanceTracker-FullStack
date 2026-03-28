@@ -35,6 +35,40 @@ export default function ReportsPage() {
     enabled: !!accountId,
   });
 
+  function exportCsv() {
+    const lines: string[] = [];
+
+    lines.push("Report,Personal Finance Tracker");
+    lines.push(`DateFrom,${dateFrom}`);
+    lines.push(`DateTo,${dateTo}`);
+    lines.push("");
+
+    lines.push("Category Spend");
+    lines.push("Category,Amount");
+    (categorySpend ?? []).forEach((row) => {
+      lines.push(`${escapeCsv(row.categoryName)},${row.totalAmount}`);
+    });
+    lines.push("");
+
+    lines.push("Income vs Expense");
+    lines.push("Period,Income,Expense,Net");
+    (incomeVsExpense ?? []).forEach((row) => {
+      lines.push(`${escapeCsv(row.period)},${row.income},${row.expense},${row.net}`);
+    });
+    lines.push("");
+
+    if (accountId) {
+      lines.push("Account Balance Trend");
+      lines.push("Date,Balance");
+      (accountTrend ?? []).forEach((row) => {
+        lines.push(`${row.date},${row.balance}`);
+      });
+      lines.push("");
+    }
+
+    downloadTextFile(lines.join("\n"), `reports_${dateFrom}_${dateTo}.csv`, "text/csv");
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -79,6 +113,16 @@ export default function ReportsPage() {
               ))}
             </select>
           </div>
+        </div>
+
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={exportCsv}
+            className="rounded-2xl border border-white/10 bg-white/6 px-4 py-2 text-sm text-white/70"
+          >
+            Export CSV
+          </button>
         </div>
       </GlassCard>
 
@@ -128,4 +172,22 @@ export default function ReportsPage() {
       </div>
     </div>
   );
+}
+
+function escapeCsv(value: string) {
+  const v = value ?? "";
+  if (/[\",\n]/.test(v)) {
+    return `"${v.replace(/\"/g, '""')}"`;
+  }
+  return v;
+}
+
+function downloadTextFile(contents: string, filename: string, mime: string) {
+  const blob = new Blob([contents], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }

@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { getDashboardSummary } from "../features/dashboard/dashboardApi";
 import { getMonthlyForecast } from "../features/forecast/forecastApi";
 import { getHealthScore } from "../features/insights/insightsApi";
+import { getIncomeVsExpenseReport } from "../features/reports/reportsApi";
 import { formatCurrency, formatDate } from "../utils/format";
 import GlassCard from "../components/Glasscard";
 import {
@@ -36,6 +38,58 @@ export default function DashboardPage() {
     queryFn: getHealthScore,
   });
 
+  const incomeExpenseDateTo = now.toISOString().slice(0, 10);
+  const incomeExpenseDateFrom = new Date(year, month - 6, 1)
+    .toISOString()
+    .slice(0, 10);
+
+  const { data: incomeVsExpense } = useQuery({
+    queryKey: [
+      "dashboard-income-expense",
+      incomeExpenseDateFrom,
+      incomeExpenseDateTo,
+    ],
+    queryFn: () => getIncomeVsExpenseReport(incomeExpenseDateFrom, incomeExpenseDateTo),
+  });
+
+  const alerts = useMemo(() => {
+    const items: { level: "warn" | "danger"; message: string }[] = [];
+
+    data?.budgetProgressCards?.forEach((budget) => {
+      if (!budget.triggeredThreshold) return;
+      if (budget.progressPercent >= 120) {
+        items.push({
+          level: "danger",
+          message: `Over budget in ${budget.categoryName} by ${formatCurrency(budget.spent - budget.budgetAmount)}.`,
+        });
+      } else if (budget.progressPercent >= 100) {
+        items.push({
+          level: "danger",
+          message: `Budget exceeded in ${budget.categoryName}.`,
+        });
+      } else if (budget.progressPercent >= 80) {
+        items.push({
+          level: "warn",
+          message: `Budget at ${budget.progressPercent}% for ${budget.categoryName}.`,
+        });
+      }
+    });
+
+    if (forecast?.riskLevel === "high") {
+      items.push({
+        level: "danger",
+        message: "Projected balance may go negative before month end.",
+      });
+    } else if (forecast?.riskLevel === "medium") {
+      items.push({
+        level: "warn",
+        message: "Projected balance looks tight this month. Watch spending.",
+      });
+    }
+
+    return items;
+  }, [data?.budgetProgressCards, forecast]);
+
   if (isLoading) {
     return <GlassCard className="p-6 text-white/70">Loading dashboard...</GlassCard>;
   }
@@ -43,6 +97,12 @@ export default function DashboardPage() {
   if (isError || !data) {
     return <GlassCard className="p-6 text-rose-300">Failed to load dashboard.</GlassCard>;
   }
+
+  const incomeExpenseChartData = (incomeVsExpense ?? []).map((p) => ({
+    period: p.period,
+    income: p.income,
+    expense: p.expense,
+  }));
 
   return (
     <div className="space-y-6">
@@ -61,6 +121,28 @@ export default function DashboardPage() {
         <StatCard title="Balance" value={formatCurrency(data.totalAccountBalance)} />
       </div>
 
+      <GlassCard className="p-6">
+        <h3 className="mb-4 text-lg font-semibold text-white">Alerts</h3>
+        {alerts.length === 0 ? (
+          <p className="text-sm text-white/55">No alerts right now.</p>
+        ) : (
+          <div className="space-y-3">
+            {alerts.map((alert, idx) => (
+              <div
+                key={`${alert.message}-${idx}`}
+                className={`rounded-2xl border px-4 py-3 text-sm ${
+                  alert.level === "danger"
+                    ? "border-rose-400/30 bg-rose-500/10 text-rose-200"
+                    : "border-amber-400/30 bg-amber-500/10 text-amber-200"
+                }`}
+              >
+                {alert.message}
+              </div>
+            ))}
+          </div>
+        )}
+      </GlassCard>
+
       <div className="grid gap-4 lg:grid-cols-3">
         <GlassCard className="p-6">
           <p className="text-sm text-white/50">Projected end-of-month</p>
@@ -74,10 +156,18 @@ export default function DashboardPage() {
 
         <GlassCard className="p-6">
           <p className="text-sm text-white/50">Safe to spend</p>
-          <p className="mt-3 text-3xl font-semibold text-white">
-            {forecast?.daily?.length ? formatCurrency(forecast.daily[0].safeToSpend) : "--"}
-          </p>
-          <p className="mt-2 text-xs text-white/50">Daily projection</p>
+          <div className="mt-4 flex items-center gap-4">
+            <SafeToSpendGauge
+              value={forecast?.daily?.[0]?.safeToSpend ?? 0}
+              max={Math.max(1, (forecast?.projectedEndBalance ?? 1) / 30)}
+            />
+            <div>
+              <p className="text-3xl font-semibold text-white">
+                {forecast?.daily?.length ? formatCurrency(forecast.daily[0].safeToSpend) : "--"}
+              </p>
+              <p className="mt-1 text-xs text-white/50">Daily projection</p>
+            </div>
+          </div>
         </GlassCard>
 
         <GlassCard className="p-6">
@@ -95,7 +185,6 @@ export default function DashboardPage() {
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.categorySpending}>
-                {/* DEFS must be inside the Chart component */}
                 <defs>
                   <linearGradient id="categorySpendGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#22d3ee" />
@@ -193,8 +282,8 @@ export default function DashboardPage() {
                       <p className="mt-1 text-xs text-white/40">{formatDate(tx.date)}</p>
                     </div>
                     <div className="text-right">
-                      <p className={`font-semibold ${tx.type === 'EXPENSE' ? 'text-rose-400' : 'text-emerald-400'}`}>
-                        {tx.type === 'EXPENSE' ? '-' : '+'}{formatCurrency(tx.amount)}
+                      <p className={`font-semibold ${String(tx.type).toLowerCase() === 'expense' ? 'text-rose-400' : 'text-emerald-400'}`}>
+                        {String(tx.type).toLowerCase() === 'expense' ? '-' : '+'}{formatCurrency(tx.amount)}
                       </p>
                       <p className="text-[10px] uppercase tracking-wider text-white/30">{tx.type}</p>
                     </div>
@@ -203,6 +292,103 @@ export default function DashboardPage() {
               ))
             )}
           </div>
+        </GlassCard>
+
+        <GlassCard className="lg:col-span-6 p-6">
+          <h3 className="mb-5 text-lg font-semibold text-white">Upcoming recurring</h3>
+          {(data.upcomingRecurring ?? []).length === 0 ? (
+            <p className="text-sm text-white/55">No upcoming recurring items this month.</p>
+          ) : (
+            <div className="space-y-3">
+              {data.upcomingRecurring.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/6 px-4 py-3"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-white">
+                      {item.title}
+                      {item.isPaused ? " (Paused)" : ""}
+                    </p>
+                    <p className="text-xs text-white/55">
+                      {formatDate(item.nextRunDate)} â€¢ {item.accountName ?? "No account"} â€¢{" "}
+                      {item.categoryName ?? "No category"}
+                    </p>
+                  </div>
+                  <p
+                    className={`text-sm font-semibold ${
+                      String(item.type).toLowerCase() === "expense"
+                        ? "text-rose-300"
+                        : "text-emerald-300"
+                    }`}
+                  >
+                    {String(item.type).toLowerCase() === "expense" ? "-" : "+"}
+                    {formatCurrency(item.amount)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </GlassCard>
+
+        <GlassCard className="lg:col-span-6 p-6">
+          <h3 className="mb-5 text-lg font-semibold text-white">Savings goals</h3>
+          {(data.goalsSummary ?? []).length === 0 ? (
+            <p className="text-sm text-white/55">No goals yet. Create one from the Goals page.</p>
+          ) : (
+            <div className="space-y-4">
+              {data.goalsSummary.map((goal) => (
+                <div key={goal.id} className="rounded-2xl border border-white/8 bg-white/6 px-4 py-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-white">
+                      {goal.icon ? `${goal.icon} ` : ""}
+                      {goal.name}
+                    </p>
+                    <p className="text-xs text-white/55">{Math.round(goal.progressPercent)}%</p>
+                  </div>
+                  <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
+                    <div
+                      className="h-full bg-gradient-to-r from-cyan-500 to-purple-500"
+                      style={{ width: `${Math.min(goal.progressPercent, 100)}%` }}
+                    />
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs text-white/55">
+                    <span>
+                      {formatCurrency(goal.currentAmount)} / {formatCurrency(goal.targetAmount)}
+                    </span>
+                    <span>{goal.targetDate ? `Due ${formatDate(goal.targetDate)}` : goal.status}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </GlassCard>
+
+        <GlassCard className="lg:col-span-12 p-6">
+          <h3 className="mb-5 text-lg font-semibold text-white">Income vs expense</h3>
+          {incomeExpenseChartData.length === 0 ? (
+            <p className="text-sm text-white/55">Not enough data yet.</p>
+          ) : (
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={incomeExpenseChartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                  <XAxis dataKey="period" stroke="rgba(255,255,255,0.55)" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis stroke="rgba(255,255,255,0.55)" fontSize={12} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    contentStyle={{
+                      background: "rgba(15, 23, 42, 0.92)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      borderRadius: "16px",
+                    }}
+                    formatter={(value: number, name: string) => [formatCurrency(value), name]}
+                  />
+                  <Line type="monotone" dataKey="income" stroke="#34d399" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="expense" stroke="#fb7185" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </GlassCard>
       </div>
     </div>
@@ -215,5 +401,42 @@ function StatCard({ title, value }: { title: string; value: string }) {
       <p className="text-sm text-white/50">{title}</p>
       <p className="mt-3 text-3xl font-semibold text-white">{value}</p>
     </GlassCard>
+  );
+}
+
+function SafeToSpendGauge({ value, max }: { value: number; max: number }) {
+  const radius = 34;
+  const stroke = 6;
+  const normalizedMax = Math.max(1, max);
+  const pct = Math.min(1, Math.max(0, value / normalizedMax));
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - pct);
+
+  return (
+    <svg width="80" height="80" viewBox="0 0 80 80">
+      <circle
+        cx="40"
+        cy="40"
+        r={radius}
+        stroke="rgba(255,255,255,0.12)"
+        strokeWidth={stroke}
+        fill="none"
+      />
+      <circle
+        cx="40"
+        cy="40"
+        r={radius}
+        stroke="#22d3ee"
+        strokeWidth={stroke}
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        fill="none"
+        transform="rotate(-90 40 40)"
+      />
+      <text x="40" y="44" textAnchor="middle" fontSize="12" fill="white">
+        {Math.round(pct * 100)}%
+      </text>
+    </svg>
   );
 }

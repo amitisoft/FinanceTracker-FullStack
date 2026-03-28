@@ -28,6 +28,7 @@ public class AccountMemberRepository : IAccountMemberRepository
     public async Task<IReadOnlyList<AccountMember>> GetByAccountIdAsync(Guid accountId)
     {
         return await _db.AccountMembers
+            .Include(m => m.User)
             .Where(m => m.AccountId == accountId && m.IsActive)
             .ToListAsync();
     }

@@ -11,6 +11,8 @@ public interface IAccountSharingService
     Task<AccountInviteDto> InviteAsync(Guid ownerId, Guid accountId, InviteAccountMemberCommand command);
     Task<IReadOnlyList<AccountMemberDto>> GetMembersAsync(Guid userId, Guid accountId);
     Task<AccountMemberDto?> UpdateMemberAsync(Guid ownerId, Guid accountId, Guid memberUserId, UpdateAccountMemberRoleCommand command);
+    Task<IReadOnlyList<PendingAccountInviteDto>> GetPendingInvitesAsync(Guid userId);
+    Task<AccountMemberDto> AcceptInviteAsync(Guid userId, Guid accountId);
 }
 
 public class AccountSharingService : IAccountSharingService
@@ -123,12 +125,31 @@ public class AccountSharingService : IAccountSharingService
         }
 
         var members = await _memberRepo.GetByAccountIdAsync(accountId);
-        return members.Select(m => new AccountMemberDto
+        var results = members.Select(m => new AccountMemberDto
         {
             UserId = m.UserId,
             Role = m.Role,
-            IsActive = m.IsActive
+            IsActive = m.IsActive,
+            Email = m.User?.Email ?? string.Empty,
+            DisplayName = m.User?.DisplayName,
+            IsOwner = false
         }).ToList();
+
+        var owner = await _userRepo.GetByIdAsync(account.UserId);
+        if (owner is not null && results.All(r => r.UserId != owner.Id))
+        {
+            results.Insert(0, new AccountMemberDto
+            {
+                UserId = owner.Id,
+                Role = "owner",
+                IsActive = true,
+                Email = owner.Email,
+                DisplayName = owner.DisplayName,
+                IsOwner = true
+            });
+        }
+
+        return results;
     }
 
     public async Task<AccountMemberDto?> UpdateMemberAsync(Guid ownerId, Guid accountId, Guid memberUserId, UpdateAccountMemberRoleCommand command)
@@ -150,11 +171,84 @@ public class AccountSharingService : IAccountSharingService
         member.UpdatedAt = DateTime.UtcNow;
         await _memberRepo.SaveChangesAsync();
 
+        var user = await _userRepo.GetByIdAsync(member.UserId);
         return new AccountMemberDto
         {
             UserId = member.UserId,
             Role = member.Role,
-            IsActive = member.IsActive
+            IsActive = member.IsActive,
+            Email = user?.Email ?? string.Empty,
+            DisplayName = user?.DisplayName,
+            IsOwner = false
+        };
+    }
+
+    public async Task<IReadOnlyList<PendingAccountInviteDto>> GetPendingInvitesAsync(Guid userId)
+    {
+        var user = await _userRepo.GetByIdAsync(userId);
+        if (user is null)
+            throw new DomainException("User not found.");
+
+        var invites = await _inviteRepo.GetPendingByEmailAsync(user.Email);
+
+        return invites.Select(invite => new PendingAccountInviteDto
+        {
+            Id = invite.Id,
+            AccountId = invite.AccountId,
+            AccountName = invite.Account?.Name ?? "Shared account",
+            Role = invite.Role,
+            ExpiresAt = invite.ExpiresAt
+        }).ToList();
+    }
+
+    public async Task<AccountMemberDto> AcceptInviteAsync(Guid userId, Guid accountId)
+    {
+        var user = await _userRepo.GetByIdAsync(userId);
+        if (user is null)
+            throw new DomainException("User not found.");
+
+        var account = await _accountRepo.GetByIdAsync(accountId);
+        if (account is null)
+            throw new DomainException("Account not found.");
+
+        var invite = await _inviteRepo.GetPendingByAccountAndEmailAsync(accountId, user.Email);
+        if (invite is null)
+            throw new DomainException("No pending invite found for this account.");
+
+        var existingMember = await _memberRepo.GetByUserAndAccountAsync(userId, accountId);
+        if (existingMember is null)
+        {
+            var member = new AccountMember
+            {
+                Id = Guid.NewGuid(),
+                AccountId = accountId,
+                UserId = userId,
+                Role = invite.Role,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            await _memberRepo.AddAsync(member);
+        }
+        else
+        {
+            existingMember.IsActive = true;
+            existingMember.Role = invite.Role;
+            existingMember.UpdatedAt = DateTime.UtcNow;
+        }
+
+        invite.Status = "accepted";
+
+        await _memberRepo.SaveChangesAsync();
+
+        return new AccountMemberDto
+        {
+            UserId = userId,
+            Role = invite.Role,
+            IsActive = true,
+            Email = user.Email,
+            DisplayName = user.DisplayName,
+            IsOwner = false
         };
     }
 }

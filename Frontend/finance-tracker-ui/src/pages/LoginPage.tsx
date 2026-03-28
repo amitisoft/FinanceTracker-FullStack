@@ -131,7 +131,7 @@ export default function LoginPage() {
             </h1>
 
             <p className="mt-6 max-w-lg text-base leading-7 text-white/65 sm:text-lg sm:leading-8">
-              Immersive budgeting, transaction intelligence, and premium control —
+              Immersive budgeting, transaction intelligence, and premium control -
               all in one fluid workspace.
             </p>
 
@@ -215,6 +215,9 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-8 flex flex-col gap-3 text-sm text-white/55 sm:flex-row sm:items-center sm:justify-between">
+            <Link to="/forgot-password" className="text-cyan-300 hover:text-cyan-200">
+              Forgot password?
+            </Link>
             <span>Secure session · Real-time sync</span>
             <Link to="/register" className="text-cyan-300 hover:text-cyan-200">
               Create account

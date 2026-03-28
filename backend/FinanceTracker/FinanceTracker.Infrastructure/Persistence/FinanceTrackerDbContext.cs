@@ -22,6 +22,7 @@ public class FinanceTrackerDbContext : DbContext
     public DbSet<AccountMember> AccountMembers => Set<AccountMember>();
     public DbSet<AccountInvite> AccountInvites => Set<AccountInvite>();
     public DbSet<AccountActivity> AccountActivities => Set<AccountActivity>();
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -209,6 +210,17 @@ public class FinanceTrackerDbContext : DbContext
             entity.HasOne(a => a.User)
                 .WithMany()
                 .HasForeignKey(a => a.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PasswordResetToken>(entity =>
+        {
+            entity.Property(t => t.Token).HasMaxLength(120).IsRequired();
+            entity.HasIndex(t => t.Token).IsUnique();
+
+            entity.HasOne(t => t.User)
+                .WithMany()
+                .HasForeignKey(t => t.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

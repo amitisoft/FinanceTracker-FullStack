@@ -22,3 +22,5 @@ export type CreateTransactionRequest = {
   note?: string;
   paymentMethod?: string;
 };
+
+export type UpdateTransactionRequest = CreateTransactionRequest;

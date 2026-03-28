@@ -45,6 +45,7 @@ export default function BudgetsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [dupMessage, setDupMessage] = useState<string>("");
 
   const [form, setForm] = useState<BudgetFormState>({ ...DEFAULT_VALUES });
   const [errors, setErrors] = useState<BudgetFormErrors>({});
@@ -104,6 +105,54 @@ export default function BudgetsPage() {
         queryKey: ["budgets", selectedMonth, selectedYear],
       });
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+    },
+  });
+
+  const duplicateMutation = useMutation({
+    mutationFn: async () => {
+      const prevMonth = selectedMonth === 1 ? 12 : selectedMonth - 1;
+      const prevYear = selectedMonth === 1 ? selectedYear - 1 : selectedYear;
+
+      const prevBudgets = await getBudgets(prevMonth, prevYear);
+      if (!prevBudgets.length) {
+        return { created: 0, skipped: 0, total: 0 };
+      }
+
+      let created = 0;
+      let skipped = 0;
+
+      for (const b of prevBudgets as any[]) {
+        try {
+          await createBudget({
+            categoryId: b.categoryId,
+            month: selectedMonth,
+            year: selectedYear,
+            amount: b.amount,
+            alertThresholdPercent: b.alertThresholdPercent ?? 80,
+          });
+          created++;
+        } catch {
+          skipped++;
+        }
+      }
+
+      return { created, skipped, total: prevBudgets.length };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({
+        queryKey: ["budgets", selectedMonth, selectedYear],
+      });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+
+      if (result.total === 0) {
+        setDupMessage("No previous-month budgets found to duplicate.");
+      } else {
+        setDupMessage(
+          `Duplicated ${result.created}/${result.total} budgets (skipped ${result.skipped}).`
+        );
+      }
+
+      setTimeout(() => setDupMessage(""), 6000);
     },
   });
 
@@ -331,14 +380,50 @@ export default function BudgetsPage() {
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="text-lg font-semibold text-white">Active Budgets</h3>
 
-              <input
-                type="text"
-                placeholder="Search category..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white outline-none focus:border-cyan-500/50 sm:w-64"
-              />
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    max={12}
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(Number(e.target.value || currentMonth))}
+                    className="w-24 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500/50"
+                  />
+                  <input
+                    type="number"
+                    min={2000}
+                    max={2100}
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(Number(e.target.value || currentYear))}
+                    className="w-28 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500/50"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => duplicateMutation.mutate()}
+                  disabled={duplicateMutation.isPending}
+                  className="rounded-2xl border border-white/10 bg-white/6 px-4 py-2 text-sm text-white/70 disabled:opacity-50"
+                >
+                  {duplicateMutation.isPending ? "Duplicating..." : "Duplicate prev month"}
+                </button>
+
+                <input
+                  type="text"
+                  placeholder="Search category..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white outline-none focus:border-cyan-500/50 sm:w-64"
+                />
+              </div>
             </div>
+
+            {dupMessage ? (
+              <div className="mb-4 rounded-2xl border border-cyan-500/20 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100/90">
+                {dupMessage}
+              </div>
+            ) : null}
 
             {isLoading ? (
               <div className="py-20 text-center text-white/40">

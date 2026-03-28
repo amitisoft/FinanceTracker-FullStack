@@ -1,4 +1,4 @@
-﻿using System.Net.Mail;
+using System.Net.Mail;
 using FinanceTracker.Application.Auth.Commands;
 using FinanceTracker.Application.Auth.DTOs;
 using FinanceTracker.Application.Categories.Services;
@@ -15,17 +15,20 @@ public class AuthService : IAuthService
     private readonly ITokenService _tokenService;
     private readonly IRefreshTokenRepository _refreshTokenRepository;
     private readonly ICategoryService _categoryService;
+    private readonly IPasswordResetTokenRepository _passwordResetTokenRepository;
 
     public AuthService(
         IUserRepository userRepository,
         ITokenService tokenService,
         IRefreshTokenRepository refreshTokenRepository,
-        ICategoryService categoryService)
+        ICategoryService categoryService,
+        IPasswordResetTokenRepository passwordResetTokenRepository)
     {
         _userRepository = userRepository;
         _tokenService = tokenService;
         _refreshTokenRepository = refreshTokenRepository;
         _categoryService = categoryService;
+        _passwordResetTokenRepository = passwordResetTokenRepository;
     }
 
     public async Task RegisterAsync(RegisterUserCommand command)
@@ -87,6 +90,100 @@ public class AuthService : IAuthService
             RefreshToken = refreshToken.Token,
             ExpiresAt = DateTime.UtcNow.AddMinutes(30)
         };
+    }
+
+    public async Task<AuthResponse> RefreshAsync(RefreshTokenCommand command)
+    {
+        var token = command.RefreshToken?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(token))
+            throw new DomainException("Refresh token is required.");
+
+        var existing = await _refreshTokenRepository.GetByTokenAsync(token);
+        if (existing is null || existing.IsRevoked || existing.ExpiresAt < DateTime.UtcNow)
+            throw new DomainException("Invalid or expired refresh token.");
+
+        var user = await _userRepository.GetByIdAsync(existing.UserId);
+        if (user is null)
+            throw new DomainException("User not found.");
+
+        existing.IsRevoked = true;
+
+        var accessToken = _tokenService.GenerateAccessToken(user);
+        var newRefreshToken = _tokenService.GenerateRefreshToken(user.Id);
+
+        await _refreshTokenRepository.AddAsync(newRefreshToken);
+        await _refreshTokenRepository.SaveChangesAsync();
+
+        return new AuthResponse
+        {
+            AccessToken = accessToken,
+            RefreshToken = newRefreshToken.Token,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(30)
+        };
+    }
+
+    public async Task<ForgotPasswordResponse> ForgotPasswordAsync(ForgotPasswordCommand command)
+    {
+        var email = command.Email?.Trim() ?? string.Empty;
+        if (!IsValidEmail(email))
+            throw new DomainException("A valid email address is required.");
+
+        var user = await _userRepository.GetByEmailAsync(email);
+        if (user == null)
+        {
+            // Do not reveal existence; return generic response
+            return new ForgotPasswordResponse
+            {
+                Message = "If the email exists, a reset link has been generated."
+            };
+        }
+
+        var token = Guid.NewGuid().ToString("N");
+        var reset = new PasswordResetToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            Token = token,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(30),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _passwordResetTokenRepository.AddAsync(reset);
+        await _passwordResetTokenRepository.SaveChangesAsync();
+
+        // Hackathon mode: return token in response (no email integration)
+        return new ForgotPasswordResponse
+        {
+            Message = "Reset token generated.",
+            ResetToken = token,
+            ExpiresAt = reset.ExpiresAt
+        };
+    }
+
+    public async Task ResetPasswordAsync(ResetPasswordCommand command)
+    {
+        var token = command.Token?.Trim() ?? string.Empty;
+        var newPassword = command.NewPassword ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(token))
+            throw new DomainException("Reset token is required.");
+
+        if (!IsValidPassword(newPassword))
+            throw new DomainException("Password must be at least 8 characters and include uppercase, lowercase, and a number.");
+
+        var reset = await _passwordResetTokenRepository.GetByTokenAsync(token);
+        if (reset is null || reset.UsedAt != null || reset.ExpiresAt < DateTime.UtcNow)
+            throw new DomainException("Invalid or expired reset token.");
+
+        var user = await _userRepository.GetByIdAsync(reset.UserId);
+        if (user is null)
+            throw new DomainException("User not found.");
+
+        user.PasswordHash = PasswordHasher.Hash(newPassword);
+        reset.UsedAt = DateTime.UtcNow;
+
+        await _userRepository.SaveChangesAsync();
+        await _passwordResetTokenRepository.SaveChangesAsync();
     }
 
     private static bool IsValidEmail(string email)

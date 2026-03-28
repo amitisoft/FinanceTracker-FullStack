@@ -26,6 +26,30 @@ export type RecentTransaction = {
     categoryName: string;
 };
 
+export type GoalSummary = {
+    id: string;
+    name: string;
+    targetAmount: number;
+    currentAmount: number;
+    progressPercent: number;
+    targetDate?: string | null;
+    status: string;
+    icon?: string | null;
+    color?: string | null;
+};
+
+export type UpcomingRecurring = {
+    id: string;
+    title: string;
+    type: string;
+    amount: number;
+    nextRunDate: string;
+    accountName?: string | null;
+    categoryName?: string | null;
+    autoCreateTransaction: boolean;
+    isPaused: boolean;
+};
+
 export type DashboardSummary = {
     month: number;
     year: number;
@@ -36,6 +60,6 @@ export type DashboardSummary = {
     budgetProgressCards: BudgetProgressCard[];
     categorySpending: CategorySpending[];
     recentTransactions: RecentTransaction[];
-    goalsSummary: unknown[];
-    upcomingRecurring: unknown[];
+    goalsSummary: GoalSummary[];
+    upcomingRecurring: UpcomingRecurring[];
 };

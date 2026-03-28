@@ -8,6 +8,7 @@ import {
   createRecurring,
   deleteRecurring,
   getRecurring,
+  updateRecurring,
   processDueRecurring,
 } from "../features/recurring/recurringApi";
 import { getApiErrorMessage } from "../lib/getApiErrorMessage";
@@ -85,6 +86,16 @@ export default function RecurringPage() {
     mutationFn: deleteRecurring,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recurring"] });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: any }) =>
+      updateRecurring(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recurring"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["forecast-month"] });
     },
   });
 
@@ -401,6 +412,7 @@ export default function RecurringPage() {
                           <span className="capitalize">{item.type}</span> •{" "}
                           <span className="capitalize">{item.frequency}</span> •
                           Next run: {formatDate(item.nextRunDate)}
+                          {item.isPaused ? " • Paused" : ""}
                         </p>
                         <p
                           className={`mt-2 font-mono text-xl ${
@@ -414,18 +426,46 @@ export default function RecurringPage() {
                         </p>
                       </div>
 
-                      <button
-                        onClick={() => {
-                          if (
-                            confirm("Are you sure you want to stop this automation?")
-                          ) {
-                            deleteMutation.mutate(item.id);
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateMutation.mutate({
+                              id: item.id,
+                              payload: {
+                                title: item.title,
+                                type: item.type,
+                                amount: item.amount,
+                                categoryId: item.categoryId ?? null,
+                                accountId: item.accountId ?? null,
+                                frequency: item.frequency,
+                                startDate: item.startDate,
+                                endDate: item.endDate ?? null,
+                                nextRunDate: item.nextRunDate,
+                                autoCreateTransaction: item.autoCreateTransaction,
+                                isPaused: !item.isPaused,
+                              },
+                            })
                           }
-                        }}
-                        className="rounded-xl border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-200 transition hover:bg-rose-500/20"
-                      >
-                        Delete
-                      </button>
+                          className="rounded-xl border border-white/10 bg-white/8 px-3 py-2 text-sm text-white/80 transition hover:bg-white/14 disabled:opacity-50"
+                          disabled={updateMutation.isPending}
+                        >
+                          {item.isPaused ? "Resume" : "Pause"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm("Are you sure you want to stop this automation?")) {
+                              deleteMutation.mutate(item.id);
+                            }
+                          }}
+                          className="rounded-xl border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
+                          disabled={deleteMutation.isPending}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}

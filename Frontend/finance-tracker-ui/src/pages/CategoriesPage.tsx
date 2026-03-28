@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createCategory, getCategories } from "../features/categories/categoriesApi";
+import { archiveCategory, createCategory, getCategories, updateCategory } from "../features/categories/categoriesApi";
 import GlassCard from "../components/Glasscard";
 import NeonInput from "../components/NeonInput";
 import { getApiErrorMessage } from "../lib/getApiErrorMessage";
@@ -34,6 +34,7 @@ export default function CategoriesPage() {
 
   const [form, setForm] = useState<CategoryFormState>({ ...DEFAULT_VALUES });
   const [errors, setErrors] = useState<CategoryFormErrors>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: createCategory,
@@ -41,6 +42,25 @@ export default function CategoriesPage() {
       queryClient.invalidateQueries({ queryKey: ["categories"] });
       setForm({ ...DEFAULT_VALUES });
       setErrors({});
+      setEditingId(null);
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: any }) =>
+      updateCategory(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      setForm({ ...DEFAULT_VALUES });
+      setErrors({});
+      setEditingId(null);
+    },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: archiveCategory,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
     },
   });
 
@@ -86,12 +106,18 @@ export default function CategoriesPage() {
       return;
     }
 
-    mutation.mutate({
+    const payload = {
       name: form.name.trim(),
       type: form.type,
       color: form.color.trim() || undefined,
       icon: form.icon.trim() || undefined,
-    });
+    };
+
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, payload });
+    } else {
+      mutation.mutate(payload);
+    }
   }
 
   return (
@@ -109,7 +135,7 @@ export default function CategoriesPage() {
         <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-[380px_1fr]">
           <GlassCard className="p-4 sm:p-6">
             <h3 className="mb-5 text-lg font-semibold text-white">
-              Create category
+              {editingId ? "Edit category" : "Create category"}
             </h3>
 
             <form onSubmit={handleSubmit} className="space-y-4" noValidate>
@@ -158,23 +184,41 @@ export default function CategoriesPage() {
                 error={errors.icon}
               />
 
-              {mutation.isError && (
+              {(mutation.isError || updateMutation.isError) && (
                 <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3">
                   <p className="text-sm font-medium text-rose-200">
                     {getApiErrorMessage(
-                      mutation.error,
-                      "Failed to create category."
+                      (mutation.error ?? updateMutation.error) as any,
+                      editingId ? "Failed to update category." : "Failed to create category."
                     )}
                   </p>
                 </div>
               )}
 
               <button
-                disabled={mutation.isPending}
+                disabled={mutation.isPending || updateMutation.isPending}
                 className="w-full rounded-2xl bg-white/12 px-4 py-4 text-white transition hover:bg-white/16 disabled:opacity-50"
               >
-                {mutation.isPending ? "Saving..." : "Create Category"}
+                {mutation.isPending || updateMutation.isPending
+                  ? "Saving..."
+                  : editingId
+                    ? "Update Category"
+                    : "Create Category"}
               </button>
+
+              {editingId && (
+                <button
+                  type="button"
+                  className="w-full rounded-2xl border border-white/10 bg-white/6 px-4 py-4 text-white/80 transition hover:bg-white/10"
+                  onClick={() => {
+                    setEditingId(null);
+                    setForm({ ...DEFAULT_VALUES });
+                    setErrors({});
+                  }}
+                >
+                  Cancel edit
+                </button>
+              )}
             </form>
           </GlassCard>
 
@@ -201,6 +245,33 @@ export default function CategoriesPage() {
                     <p className="mt-2 text-sm text-white/50">
                       {item.icon || "no-icon"} • {item.color || "no-color"}
                     </p>
+
+                    <div className="mt-4 flex gap-2">
+                      <button
+                        type="button"
+                        className="rounded-2xl border border-white/10 bg-white/6 px-3 py-2 text-xs text-white/80 transition hover:bg-white/10"
+                        onClick={() => {
+                          setEditingId(item.id);
+                          setForm({
+                            name: item.name ?? "",
+                            type: (item.type ?? "expense") as CategoryType,
+                            color: item.color ?? "",
+                            icon: item.icon ?? "",
+                          });
+                          setErrors({});
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
+                        disabled={archiveMutation.isPending}
+                        onClick={() => archiveMutation.mutate(item.id)}
+                      >
+                        Archive
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

@@ -2,6 +2,9 @@ export type AccountMember = {
   userId: string;
   role: string;
   isActive: boolean;
+  email: string;
+  displayName?: string | null;
+  isOwner: boolean;
 };
 
 export type AccountInvite = {
@@ -9,6 +12,14 @@ export type AccountInvite = {
   email: string;
   role: string;
   status: string;
+  expiresAt: string;
+};
+
+export type PendingAccountInvite = {
+  id: string;
+  accountId: string;
+  accountName: string;
+  role: string;
   expiresAt: string;
 };
 

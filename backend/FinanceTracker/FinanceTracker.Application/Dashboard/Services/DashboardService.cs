@@ -11,17 +11,23 @@ public class DashboardService : IDashboardService
     private readonly ITransactionRepository _transactionRepository;
     private readonly IBudgetRepository _budgetRepository;
     private readonly ICategoryRepository _categoryRepository;
+    private readonly IGoalRepository _goalRepository;
+    private readonly IRecurringTransactionRepository _recurringRepository;
 
     public DashboardService(
         IAccountRepository accountRepository,
         ITransactionRepository transactionRepository,
         IBudgetRepository budgetRepository,
-        ICategoryRepository categoryRepository)
+        ICategoryRepository categoryRepository,
+        IGoalRepository goalRepository,
+        IRecurringTransactionRepository recurringRepository)
     {
         _accountRepository = accountRepository;
         _transactionRepository = transactionRepository;
         _budgetRepository = budgetRepository;
         _categoryRepository = categoryRepository;
+        _goalRepository = goalRepository;
+        _recurringRepository = recurringRepository;
     }
 
     public async Task<DashboardSummaryDto> GetSummaryAsync(Guid userId, GetDashboardSummaryQuery query)
@@ -36,6 +42,8 @@ public class DashboardService : IDashboardService
         var transactions = await _transactionRepository.GetAllByUserIdAsync(userId);
         var budgets = await _budgetRepository.GetByMonthYearAsync(userId, query.Month, query.Year);
         var categories = await _categoryRepository.GetAllByUserIdAsync(userId, null, true);
+        var goals = await _goalRepository.GetAllByUserIdAsync(userId);
+        var recurring = await _recurringRepository.GetAllByUserIdAsync(userId);
 
         var monthTransactions = transactions
             .Where(t => t.TransactionDate.Month == query.Month && t.TransactionDate.Year == query.Year)
@@ -130,6 +138,60 @@ public class DashboardService : IDashboardService
             })
             .ToList();
 
+        var goalSummaries = goals
+            .OrderBy(g => g.Status == "completed" ? 1 : 0)
+            .ThenBy(g => g.TargetDate ?? DateTime.MaxValue)
+            .ThenBy(g => g.Name)
+            .Take(5)
+            .Select(g =>
+            {
+                var progress = g.TargetAmount == 0 ? 0 : Math.Round((g.CurrentAmount / g.TargetAmount) * 100, 2);
+                return new GoalSummaryDto
+                {
+                    Id = g.Id,
+                    Name = g.Name,
+                    TargetAmount = g.TargetAmount,
+                    CurrentAmount = g.CurrentAmount,
+                    ProgressPercent = progress,
+                    TargetDate = g.TargetDate,
+                    Status = g.Status,
+                    Icon = g.Icon,
+                    Color = g.Color
+                };
+            })
+            .ToList();
+
+        var todayUtc = DateTime.UtcNow.Date;
+        var endOfQueryMonth = new DateTime(query.Year, query.Month, DateTime.DaysInMonth(query.Year, query.Month), 0, 0, 0, DateTimeKind.Utc);
+        var upcomingRecurring = recurring
+            .Where(r => !r.IsPaused && r.NextRunDate.Date >= todayUtc && r.NextRunDate.Date <= endOfQueryMonth.Date)
+            .OrderBy(r => r.NextRunDate)
+            .ThenBy(r => r.Title)
+            .Take(8)
+            .Select(r =>
+            {
+                var accountName = r.AccountId.HasValue
+                    ? accounts.FirstOrDefault(a => a.Id == r.AccountId.Value)?.Name
+                    : null;
+                var categoryName = r.CategoryId.HasValue
+                    ? categories.FirstOrDefault(c => c.Id == r.CategoryId.Value)?.Name
+                    : null;
+
+                return new UpcomingRecurringDto
+                {
+                    Id = r.Id,
+                    Title = r.Title,
+                    Type = r.Type,
+                    Amount = r.Amount,
+                    NextRunDate = r.NextRunDate,
+                    AccountName = accountName,
+                    CategoryName = categoryName,
+                    AutoCreateTransaction = r.AutoCreateTransaction,
+                    IsPaused = r.IsPaused
+                };
+            })
+            .ToList();
+
         return new DashboardSummaryDto
         {
             Month = query.Month,
@@ -141,8 +203,8 @@ public class DashboardService : IDashboardService
             BudgetProgressCards = budgetCards,
             CategorySpending = categorySpending,
             RecentTransactions = recentTransactions,
-            GoalsSummary = [],
-            UpcomingRecurring = []
+            GoalsSummary = goalSummaries,
+            UpcomingRecurring = upcomingRecurring
         };
     }
 }

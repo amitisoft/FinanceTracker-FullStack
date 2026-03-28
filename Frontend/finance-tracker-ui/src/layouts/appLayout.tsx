@@ -1,5 +1,6 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { authStore } from "../store/authStore";
+import { decodeJwt } from "../utils/jwt";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard" },
@@ -18,6 +19,9 @@ const navItems = [
 export default function AppLayout() {
   const location = useLocation();
   const clearAuth = authStore((s) => s.clearAuth);
+  const accessToken = authStore((s) => s.accessToken);
+  const jwt = decodeJwt(accessToken);
+  const userLabel = jwt?.email ?? "";
 
   return (
     <div className="grid-glow min-h-screen px-4 pb-28 pt-6 md:px-8">
@@ -26,6 +30,9 @@ export default function AppLayout() {
           <div>
             <p className="text-xs uppercase tracking-[0.28em] text-white/40">Finance Tracker</p>
             <h1 className="mt-2 text-2xl font-semibold text-white">Calm Command Center</h1>
+            {userLabel ? (
+              <p className="mt-1 text-xs text-white/55">Signed in as {userLabel}</p>
+            ) : null}
           </div>
 
           <button
@@ -39,6 +46,21 @@ export default function AppLayout() {
         <main>
           <Outlet />
         </main>
+      </div>
+
+      <div className="fixed bottom-24 right-6 z-40 flex flex-col gap-3">
+        <Link
+          to="/transactions"
+          className="rounded-full bg-cyan-500/90 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-500/30 transition hover:bg-cyan-400"
+        >
+          + Add Expense
+        </Link>
+        <Link
+          to="/transactions"
+          className="rounded-full bg-emerald-500/90 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400"
+        >
+          + Add Income
+        </Link>
       </div>
 
       <nav className="fixed bottom-5 left-1/2 z-50 w-[min(95vw,980px)] -translate-x-1/2">

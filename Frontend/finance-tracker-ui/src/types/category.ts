@@ -13,3 +13,5 @@ export type CreateCategoryRequest = {
   color?: string;
   icon?: string;
 };
+
+export type UpdateCategoryRequest = CreateCategoryRequest;

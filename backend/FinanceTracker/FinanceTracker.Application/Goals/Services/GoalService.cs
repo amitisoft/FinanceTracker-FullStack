@@ -10,11 +10,16 @@ public class GoalService : IGoalService
 {
     private readonly IGoalRepository _goalRepository;
     private readonly IAccountRepository _accountRepository;
+    private readonly IAccountActivityRepository _activityRepository;
 
-    public GoalService(IGoalRepository goalRepository, IAccountRepository accountRepository)
+    public GoalService(
+        IGoalRepository goalRepository,
+        IAccountRepository accountRepository,
+        IAccountActivityRepository activityRepository)
     {
         _goalRepository = goalRepository;
         _accountRepository = accountRepository;
+        _activityRepository = activityRepository;
     }
 
     public async Task<IReadOnlyList<GoalDto>> GetAllAsync(Guid userId)
@@ -110,6 +115,17 @@ public class GoalService : IGoalService
 
             account.CurrentBalance -= command.Amount;
             account.LastUpdatedAt = DateTime.UtcNow;
+
+            await _activityRepository.AddAsync(new AccountActivity
+            {
+                Id = Guid.NewGuid(),
+                AccountId = account.Id,
+                UserId = userId,
+                Action = "goal_contribution",
+                EntityType = "goal",
+                EntityId = goal.Id,
+                CreatedAt = DateTime.UtcNow
+            });
         }
 
         goal.CurrentAmount += command.Amount;
@@ -140,6 +156,17 @@ public class GoalService : IGoalService
 
             account.CurrentBalance += command.Amount;
             account.LastUpdatedAt = DateTime.UtcNow;
+
+            await _activityRepository.AddAsync(new AccountActivity
+            {
+                Id = Guid.NewGuid(),
+                AccountId = account.Id,
+                UserId = userId,
+                Action = "goal_withdraw",
+                EntityType = "goal",
+                EntityId = goal.Id,
+                CreatedAt = DateTime.UtcNow
+            });
         }
 
         goal.CurrentAmount -= command.Amount;
