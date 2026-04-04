@@ -6,6 +6,8 @@ public class TransactionDto
 
     public Guid AccountId { get; set; }
 
+    public Guid? DestinationAccountId { get; set; }
+
     public Guid? CategoryId { get; set; }
 
     public string Type { get; set; } = string.Empty;
@@ -19,6 +21,8 @@ public class TransactionDto
     public string? Note { get; set; }
 
     public string? PaymentMethod { get; set; }
+
+    public List<string> Tags { get; set; } = new();
 
     public DateTime CreatedAt { get; set; }
 

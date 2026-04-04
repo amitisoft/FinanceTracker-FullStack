@@ -11,8 +11,10 @@ using FinanceTracker.Application.Reports.Services;
 using FinanceTracker.Application.Transactions.Services;
 using FinanceTracker.Application.Forecast.Services;
 using FinanceTracker.Application.Insights.Services;
+using FinanceTracker.Application.Profile.Services;
 using FinanceTracker.Application.Rules.Services;
 using FinanceTracker.Domain.Interfaces;
+using FinanceTracker.Infrastructure.Background;
 using FinanceTracker.Infrastructure.Persistence;
 using FinanceTracker.Infrastructure.Repositories;
 using FinanceTracker.Infrastructure.Security;
@@ -56,6 +58,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBudgetService, BudgetService>();
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IReportService, ReportService>();
+        services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<IDemoSeedService, DemoSeedService>();
         services.AddScoped<IGoalRepository, GoalRepository>();
         services.AddScoped<IGoalService, GoalService>();
@@ -64,6 +67,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRuleService, RuleService>();
         services.AddScoped<IHealthScoreService, HealthScoreService>();
         services.AddScoped<IInsightsService, InsightsService>();
+        services.AddHostedService<RecurringProcessingHostedService>();
 
         return services;
     }

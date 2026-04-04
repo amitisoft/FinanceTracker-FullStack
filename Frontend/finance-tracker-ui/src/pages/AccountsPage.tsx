@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getAccounts, createAccount, transferFunds } from "../features/accounts/accountApi";
+import { getAccounts, createAccount, updateAccount, transferFunds } from "../features/accounts/accountApi";
 import GlassCard from "../components/Glasscard";
 import NeonInput from "../components/NeonInput";
 import { getApiErrorMessage } from "../lib/getApiErrorMessage";
 import { formatCurrency } from "../utils/format";
-import AppShell from "../components/AppShell";
+import { useToast } from "../components/ToastProvider";
 
 type AccountType = "bank" | "cash" | "savings" | "credit_card";
 
@@ -51,6 +51,7 @@ function isValidMoneyString(value: string) {
 
 export default function AccountsPage() {
   const queryClient = useQueryClient();
+  const { pushToast } = useToast();
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["accounts"],
@@ -61,14 +62,44 @@ export default function AccountsPage() {
   const [errors, setErrors] = useState<AccountFormErrors>({});
   const [transferForm, setTransferForm] = useState<TransferFormState>({ ...DEFAULT_TRANSFER });
   const [transferErrors, setTransferErrors] = useState<TransferFormErrors>({});
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
 
-  const mutation = useMutation({
+  const createMutation = useMutation({
     mutationFn: createAccount,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
       setForm({ ...DEFAULT_VALUES });
       setErrors({});
+      setEditingAccountId(null);
+      pushToast({ title: "Account created", variant: "success" });
+    },
+    onError: (error) => {
+      pushToast({
+        title: "Failed to create account",
+        description: getApiErrorMessage(error, "Please try again."),
+        variant: "error",
+      });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: any }) =>
+      updateAccount(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      setForm({ ...DEFAULT_VALUES });
+      setErrors({});
+      setEditingAccountId(null);
+      pushToast({ title: "Account updated", variant: "success" });
+    },
+    onError: (error) => {
+      pushToast({
+        title: "Failed to update account",
+        description: getApiErrorMessage(error, "Please try again."),
+        variant: "error",
+      });
     },
   });
 
@@ -79,10 +110,18 @@ export default function AccountsPage() {
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
       setTransferForm({ ...DEFAULT_TRANSFER });
       setTransferErrors({});
+      pushToast({ title: "Transfer completed", variant: "success" });
+    },
+    onError: (error) => {
+      pushToast({
+        title: "Transfer failed",
+        description: getApiErrorMessage(error, "Please try again."),
+        variant: "error",
+      });
     },
   });
 
-  const isSubmitting = mutation.isPending;
+  const isSubmitting = createMutation.isPending || updateMutation.isPending;
   const canSubmit = useMemo(() => !isSubmitting, [isSubmitting]);
   const isTransferring = transferMutation.isPending;
 
@@ -110,7 +149,7 @@ export default function AccountsPage() {
     setField(key, rawValue);
   }
 
-  function validateForm(values: AccountFormState): AccountFormErrors {
+  function validateForm(values: AccountFormState, isEditing: boolean): AccountFormErrors {
     const nextErrors: AccountFormErrors = {};
 
     const trimmedName = values.name.trim();
@@ -124,11 +163,13 @@ export default function AccountsPage() {
       nextErrors.type = "Type is required";
     }
 
-    if (values.openingBalance.trim() === "") {
-      nextErrors.openingBalance = "Opening balance is required";
-    } else if (!isValidMoneyString(values.openingBalance)) {
-      nextErrors.openingBalance =
-        "Opening balance must be 0 or more, with up to 2 decimals";
+    if (!isEditing) {
+      if (values.openingBalance.trim() === "") {
+        nextErrors.openingBalance = "Opening balance is required";
+      } else if (!isValidMoneyString(values.openingBalance)) {
+        nextErrors.openingBalance =
+          "Opening balance must be 0 or more, with up to 2 decimals";
+      }
     }
 
     return nextErrors;
@@ -172,17 +213,40 @@ export default function AccountsPage() {
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    const nextErrors = validateForm(form);
+    const nextErrors = validateForm(form, !!editingAccountId);
     setErrors(nextErrors);
 
     if (Object.keys(nextErrors).length > 0) return;
 
-    mutation.mutate({
-      name: form.name.trim(),
-      type: form.type,
-      openingBalance: Number(form.openingBalance),
-      institutionName: form.institutionName.trim() || undefined,
+    if (editingAccountId) {
+      updateMutation.mutate({
+        id: editingAccountId,
+        payload: {
+          name: form.name.trim(),
+          type: form.type,
+          institutionName: form.institutionName.trim() || undefined,
+        },
+      });
+    } else {
+      createMutation.mutate({
+        name: form.name.trim(),
+        type: form.type,
+        openingBalance: Number(form.openingBalance),
+        institutionName: form.institutionName.trim() || undefined,
+      });
+    }
+  }
+
+  function beginEdit(account: any) {
+    setEditingAccountId(account.id);
+    setForm({
+      name: account.name ?? "",
+      type: (account.type ?? "bank") as AccountType,
+      openingBalance: String(account.openingBalance ?? ""),
+      institutionName: account.institutionName ?? "",
     });
+    setErrors({});
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function handleTransferSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -201,7 +265,6 @@ export default function AccountsPage() {
   }
 
   return (
-    <AppShell title="Accounts">
       <div className="space-y-4 p-3 sm:space-y-6 sm:p-4">
         <div>
           <p className="text-sm uppercase tracking-[0.24em] text-cyan-300/75">
@@ -216,7 +279,7 @@ export default function AccountsPage() {
           <div className="space-y-4">
           <GlassCard className="p-4 sm:p-6">
             <h3 className="mb-5 text-lg font-semibold text-white">
-              Create account
+              {editingAccountId ? "Edit account" : "Create account"}
             </h3>
 
             <form onSubmit={handleSubmit} className="space-y-4" noValidate>
@@ -245,19 +308,25 @@ export default function AccountsPage() {
                 {errors.type ? <p className="text-sm text-rose-300">{errors.type}</p> : null}
               </div>
 
-              <NeonInput
-                label="Opening balance"
-                type="number"
-                step="0.01"
-                min="0"
-                inputMode="decimal"
-                placeholder="0.00"
-                value={form.openingBalance}
-                onChange={(e) =>
-                  handleNonNegativeNumberChange("openingBalance", e.target.value)
-                }
-                error={errors.openingBalance}
-              />
+              {editingAccountId ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-white/60">
+                  Opening balance can’t be edited after creation.
+                </div>
+              ) : (
+                <NeonInput
+                  label="Opening balance"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={form.openingBalance}
+                  onChange={(e) =>
+                    handleNonNegativeNumberChange("openingBalance", e.target.value)
+                  }
+                  error={errors.openingBalance}
+                />
+              )}
 
               <NeonInput
                 label="Institution name"
@@ -267,12 +336,12 @@ export default function AccountsPage() {
                 error={errors.institutionName}
               />
 
-              {mutation.isError && (
+              {(createMutation.isError || updateMutation.isError) && (
                 <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3">
                   <p className="text-sm font-medium text-rose-200">
                     {getApiErrorMessage(
-                      mutation.error,
-                      "Failed to create account."
+                      (createMutation.error ?? updateMutation.error) as any,
+                      editingAccountId ? "Failed to update account." : "Failed to create account."
                     )}
                   </p>
                 </div>
@@ -283,8 +352,26 @@ export default function AccountsPage() {
                 disabled={!canSubmit}
                 className="w-full rounded-2xl bg-white/12 px-4 py-4 text-white transition hover:bg-white/16 disabled:opacity-50"
               >
-                {mutation.isPending ? "Saving..." : "Create Account"}
+                {isSubmitting
+                  ? "Saving..."
+                  : editingAccountId
+                    ? "Update Account"
+                    : "Create Account"}
               </button>
+
+              {editingAccountId && (
+                <button
+                  type="button"
+                  className="w-full rounded-2xl border border-white/10 bg-white/6 px-4 py-4 text-white/80 transition hover:bg-white/10"
+                  onClick={() => {
+                    setEditingAccountId(null);
+                    setForm({ ...DEFAULT_VALUES });
+                    setErrors({});
+                  }}
+                >
+                  Cancel edit
+                </button>
+              )}
             </form>
           </GlassCard>
 
@@ -418,6 +505,16 @@ export default function AccountsPage() {
                     <p className="mt-1 text-sm text-white/50">
                       {account.institutionName || "No institution"}
                     </p>
+
+                    <div className="mt-4 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => beginEdit(account)}
+                        className="rounded-xl border border-white/10 bg-white/6 px-3 py-1.5 text-xs text-white/75 transition hover:bg-white/10"
+                      >
+                        Edit
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -425,6 +522,5 @@ export default function AccountsPage() {
           </GlassCard>
         </div>
       </div>
-    </AppShell>
   );
 }

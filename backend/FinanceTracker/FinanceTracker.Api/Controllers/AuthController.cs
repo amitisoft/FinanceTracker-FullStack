@@ -1,6 +1,7 @@
 ﻿using FinanceTracker.Application.Auth.Commands;
 using FinanceTracker.Application.Auth.DTOs;
 using FinanceTracker.Application.Auth.Services;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FinanceTracker.Api.Controllers;
@@ -17,6 +18,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
+    [EnableRateLimiting("auth")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Register([FromBody] RegisterUserCommand command)
@@ -44,6 +46,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting("auth")]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Login([FromBody] LoginCommand command)
@@ -54,6 +57,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("refresh")]
+    [EnableRateLimiting("auth")]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Refresh([FromBody] RefreshTokenCommand command)
@@ -63,6 +67,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("forgot-password")]
+    [EnableRateLimiting("auth")]
     [ProducesResponseType(typeof(ForgotPasswordResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordCommand command)
@@ -72,6 +77,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("reset-password")]
+    [EnableRateLimiting("auth")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordCommand command)

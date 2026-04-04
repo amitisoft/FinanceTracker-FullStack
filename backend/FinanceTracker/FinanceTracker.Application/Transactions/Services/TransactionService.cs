@@ -23,7 +23,8 @@ public class TransactionService : ITransactionService
     private static readonly HashSet<string> AllowedTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "income",
-        "expense"
+        "expense",
+        "transfer"
     };
 
     private readonly ITransactionRepository _transactionRepository;
@@ -57,30 +58,42 @@ public class TransactionService : ITransactionService
             command.Amount,
             command.Date,
             command.AccountId,
+            command.DestinationAccountId,
             command.CategoryId,
             command.Merchant,
             command.Note,
-            command.PaymentMethod);
+            command.PaymentMethod,
+            command.Tags,
+            null);
 
-        var resolvedCategoryId = command.CategoryId;
-        if (resolvedCategoryId is null)
+        var type = command.Type.Trim().ToLowerInvariant();
+
+        if (type == "transfer" && command.CategoryId is not null)
+            throw new DomainException("Category must be empty for transfer transactions.");
+
+        Guid? finalCategoryId = null;
+        if (type != "transfer")
         {
-            var rule = await _ruleService.GetMatchingRuleAsync(
-                userId,
-                command.Merchant ?? string.Empty,
-                command.Note ?? string.Empty,
-                command.Amount,
-                command.Type);
-            if (rule?.CategoryId is not null)
-                resolvedCategoryId = rule.CategoryId;
+            var resolvedCategoryId = command.CategoryId;
+            if (resolvedCategoryId is null)
+            {
+                var rule = await _ruleService.GetMatchingRuleAsync(
+                    userId,
+                    command.Merchant ?? string.Empty,
+                    command.Note ?? string.Empty,
+                    command.Amount,
+                    command.Type);
+                if (rule?.CategoryId is not null)
+                    resolvedCategoryId = rule.CategoryId;
+            }
+
+            finalCategoryId = resolvedCategoryId ??
+                throw new DomainException("Category is required (set manually or via a matching rule).");
         }
 
-        var finalCategoryId = resolvedCategoryId ??
-            throw new DomainException("Category is required (set manually or via a matching rule).");
-
-        if (context.Category is null)
+        if (type != "transfer" && context.Category is null)
         {
-            var ruleCategory = await _categoryRepository.GetByIdAsync(finalCategoryId, userId);
+            var ruleCategory = await _categoryRepository.GetByIdAsync(finalCategoryId!.Value, userId);
             if (ruleCategory is null)
                 throw new DomainException("Category not found.");
             if (ruleCategory.IsArchived)
@@ -89,17 +102,27 @@ public class TransactionService : ITransactionService
                 throw new DomainException("Category type must match transaction type.");
         }
 
-        var type = command.Type.Trim().ToLowerInvariant();
         var now = DateTime.UtcNow;
 
         if (type == "expense" && !CanDebit(context.Account, command.Amount))
             throw new DomainException("Insufficient balance in the selected account.");
+
+        if (type == "transfer")
+        {
+            if (context.DestinationAccount is null)
+                throw new DomainException("Destination account is required for transfers.");
+            if (context.DestinationAccount.Id == context.Account.Id)
+                throw new DomainException("Source and destination accounts must be different.");
+            if (!CanDebit(context.Account, command.Amount))
+                throw new DomainException("Insufficient balance in the selected account.");
+        }
 
         var transaction = new Transaction
         {
             Id = Guid.NewGuid(),
             UserId = userId,
             AccountId = context.Account.Id,
+            DestinationAccountId = context.DestinationAccount?.Id,
             CategoryId = finalCategoryId,
             Type = type,
             Amount = command.Amount,
@@ -107,11 +130,22 @@ public class TransactionService : ITransactionService
             Merchant = context.Merchant,
             Note = context.Note,
             PaymentMethod = context.PaymentMethod,
+            Tags = context.Tags,
             CreatedAt = now,
             UpdatedAt = now
         };
 
-        ApplyBalance(context.Account, type, command.Amount);
+        if (type == "transfer")
+        {
+            context.Account.CurrentBalance -= command.Amount;
+            context.DestinationAccount!.CurrentBalance += command.Amount;
+            context.DestinationAccount.LastUpdatedAt = now;
+        }
+        else
+        {
+            ApplyBalance(context.Account, type, command.Amount);
+        }
+
         context.Account.LastUpdatedAt = now;
 
         await _transactionRepository.AddAsync(transaction);
@@ -125,6 +159,21 @@ public class TransactionService : ITransactionService
             EntityId = transaction.Id,
             CreatedAt = now
         });
+
+        if (type == "transfer")
+        {
+            await _activityRepository.AddAsync(new AccountActivity
+            {
+                Id = Guid.NewGuid(),
+                AccountId = context.DestinationAccount!.Id,
+                UserId = userId,
+                Action = "created",
+                EntityType = "transaction",
+                EntityId = transaction.Id,
+                CreatedAt = now
+            });
+        }
+
         await _transactionRepository.SaveChangesAsync();
 
         return Map(transaction);
@@ -142,7 +191,7 @@ public class TransactionService : ITransactionService
         }
 
         if (query.AccountId.HasValue)
-            filtered = filtered.Where(t => t.AccountId == query.AccountId.Value);
+            filtered = filtered.Where(t => t.AccountId == query.AccountId.Value || t.DestinationAccountId == query.AccountId.Value);
 
         if (query.CategoryId.HasValue)
             filtered = filtered.Where(t => t.CategoryId == query.CategoryId.Value);
@@ -199,15 +248,38 @@ public class TransactionService : ITransactionService
         if (oldAccount is null)
             throw new DomainException("Original account not found.");
 
-        if (oldAccount.UserId != userId)
+        // If the transaction is visible to the user, allow edits to the existing account(s).
+
+        var oldType = existing.Type?.Trim().ToLowerInvariant() ?? string.Empty;
+        var now = DateTime.UtcNow;
+
+        if (oldType == "transfer")
         {
-            var member = await _memberRepository.GetByUserAndAccountAsync(userId, existing.AccountId);
-            if (member is null || member.Role == "viewer" || !member.IsActive)
-                throw new DomainException("Account access denied.");
+            if (!existing.DestinationAccountId.HasValue)
+                throw new DomainException("Original destination account not found.");
+
+            var oldDestination = await _accountRepository.GetByIdAsync(existing.DestinationAccountId.Value);
+            if (oldDestination is null)
+                throw new DomainException("Original destination account not found.");
+
+            // Account access is validated later when switching accounts.
+
+            oldAccount.CurrentBalance += existing.Amount;
+            oldDestination.CurrentBalance -= existing.Amount;
+
+            oldAccount.LastUpdatedAt = now;
+            oldDestination.LastUpdatedAt = now;
+        }
+        else
+        {
+            var safeType = string.IsNullOrWhiteSpace(existing.Type) ? "expense" : existing.Type;
+            RevertBalance(oldAccount, safeType, existing.Amount);
+            oldAccount.LastUpdatedAt = now;
         }
 
-        RevertBalance(oldAccount, existing.Type, existing.Amount);
-        oldAccount.LastUpdatedAt = DateTime.UtcNow;
+        var allowAccounts = new HashSet<Guid> { existing.AccountId };
+        if (existing.DestinationAccountId.HasValue)
+            allowAccounts.Add(existing.DestinationAccountId.Value);
 
         var context = await BuildAndValidateTransactionContext(
             userId,
@@ -215,30 +287,42 @@ public class TransactionService : ITransactionService
             command.Amount,
             command.Date,
             command.AccountId,
+            command.DestinationAccountId,
             command.CategoryId,
             command.Merchant,
             command.Note,
-            command.PaymentMethod);
+            command.PaymentMethod,
+            command.Tags,
+            allowAccounts);
 
-        var resolvedCategoryId = command.CategoryId;
-        if (resolvedCategoryId is null)
+        var newType = command.Type.Trim().ToLowerInvariant();
+
+        if (newType == "transfer" && command.CategoryId is not null)
+            throw new DomainException("Category must be empty for transfer transactions.");
+
+        Guid? finalCategoryId = null;
+        if (newType != "transfer")
         {
-            var rule = await _ruleService.GetMatchingRuleAsync(
-                userId,
-                command.Merchant ?? string.Empty,
-                command.Note ?? string.Empty,
-                command.Amount,
-                command.Type);
-            if (rule?.CategoryId is not null)
-                resolvedCategoryId = rule.CategoryId;
+            var resolvedCategoryId = command.CategoryId;
+            if (resolvedCategoryId is null)
+            {
+                var rule = await _ruleService.GetMatchingRuleAsync(
+                    userId,
+                    command.Merchant ?? string.Empty,
+                    command.Note ?? string.Empty,
+                    command.Amount,
+                    command.Type);
+                if (rule?.CategoryId is not null)
+                    resolvedCategoryId = rule.CategoryId;
+            }
+
+            finalCategoryId = resolvedCategoryId ??
+                throw new DomainException("Category is required (set manually or via a matching rule).");
         }
 
-        var finalCategoryId = resolvedCategoryId ??
-            throw new DomainException("Category is required (set manually or via a matching rule).");
-
-        if (context.Category is null)
+        if (newType != "transfer" && context.Category is null)
         {
-            var ruleCategory = await _categoryRepository.GetByIdAsync(finalCategoryId, userId);
+            var ruleCategory = await _categoryRepository.GetByIdAsync(finalCategoryId!.Value, userId);
             if (ruleCategory is null)
                 throw new DomainException("Category not found.");
             if (ruleCategory.IsArchived)
@@ -247,12 +331,21 @@ public class TransactionService : ITransactionService
                 throw new DomainException("Category type must match transaction type.");
         }
 
-        var newType = command.Type.Trim().ToLowerInvariant();
-
         if (newType == "expense" && !CanDebit(context.Account, command.Amount))
             throw new DomainException("Insufficient balance in the selected account.");
 
+        if (newType == "transfer")
+        {
+            if (context.DestinationAccount is null)
+                throw new DomainException("Destination account is required for transfers.");
+            if (context.DestinationAccount.Id == context.Account.Id)
+                throw new DomainException("Source and destination accounts must be different.");
+            if (!CanDebit(context.Account, command.Amount))
+                throw new DomainException("Insufficient balance in the selected account.");
+        }
+
         existing.AccountId = context.Account.Id;
+        existing.DestinationAccountId = context.DestinationAccount?.Id;
         existing.CategoryId = finalCategoryId;
         existing.Type = newType;
         existing.Amount = command.Amount;
@@ -260,10 +353,20 @@ public class TransactionService : ITransactionService
         existing.Merchant = context.Merchant;
         existing.Note = context.Note;
         existing.PaymentMethod = context.PaymentMethod;
-        existing.UpdatedAt = DateTime.UtcNow;
+        existing.Tags = context.Tags;
+        existing.UpdatedAt = now;
 
-        ApplyBalance(context.Account, newType, command.Amount);
-        context.Account.LastUpdatedAt = DateTime.UtcNow;
+        if (newType == "transfer")
+        {
+            context.Account.CurrentBalance -= command.Amount;
+            context.DestinationAccount!.CurrentBalance += command.Amount;
+            context.DestinationAccount.LastUpdatedAt = now;
+        }
+        else
+        {
+            ApplyBalance(context.Account, newType, command.Amount);
+        }
+        context.Account.LastUpdatedAt = now;
 
         await _activityRepository.AddAsync(new AccountActivity
         {
@@ -273,8 +376,22 @@ public class TransactionService : ITransactionService
             Action = "updated",
             EntityType = "transaction",
             EntityId = existing.Id,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = now
         });
+
+        if (newType == "transfer")
+        {
+            await _activityRepository.AddAsync(new AccountActivity
+            {
+                Id = Guid.NewGuid(),
+                AccountId = context.DestinationAccount!.Id,
+                UserId = userId,
+                Action = "updated",
+                EntityType = "transaction",
+                EntityId = existing.Id,
+                CreatedAt = now
+            });
+        }
         await _transactionRepository.SaveChangesAsync();
 
         return Map(existing);
@@ -290,15 +407,33 @@ public class TransactionService : ITransactionService
         if (account is null)
             throw new DomainException("Account not found.");
 
-        if (account.UserId != userId)
-        {
-            var member = await _memberRepository.GetByUserAndAccountAsync(userId, existing.AccountId);
-            if (member is null || member.Role == "viewer" || !member.IsActive)
-                throw new DomainException("Account access denied.");
-        }
+        // If the transaction is visible, allow deletion from current account(s).
 
-        RevertBalance(account, existing.Type, existing.Amount);
-        account.LastUpdatedAt = DateTime.UtcNow;
+        var type = existing.Type?.Trim().ToLowerInvariant() ?? string.Empty;
+        var now = DateTime.UtcNow;
+
+        if (type == "transfer")
+        {
+            if (!existing.DestinationAccountId.HasValue)
+                throw new DomainException("Destination account not found.");
+
+            var destination = await _accountRepository.GetByIdAsync(existing.DestinationAccountId.Value);
+            if (destination is null)
+                throw new DomainException("Destination account not found.");
+
+            // Deletion is allowed if the transaction is visible to the user.
+
+            account.CurrentBalance += existing.Amount;
+            destination.CurrentBalance -= existing.Amount;
+            account.LastUpdatedAt = now;
+            destination.LastUpdatedAt = now;
+        }
+        else
+        {
+            var safeType = string.IsNullOrWhiteSpace(existing.Type) ? "expense" : existing.Type;
+            RevertBalance(account, safeType, existing.Amount);
+            account.LastUpdatedAt = now;
+        }
 
         _transactionRepository.Remove(existing);
         await _activityRepository.AddAsync(new AccountActivity
@@ -309,24 +444,40 @@ public class TransactionService : ITransactionService
             Action = "deleted",
             EntityType = "transaction",
             EntityId = existing.Id,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = now
         });
+        if (type == "transfer" && existing.DestinationAccountId.HasValue)
+        {
+            await _activityRepository.AddAsync(new AccountActivity
+            {
+                Id = Guid.NewGuid(),
+                AccountId = existing.DestinationAccountId.Value,
+                UserId = userId,
+                Action = "deleted",
+                EntityType = "transaction",
+                EntityId = existing.Id,
+                CreatedAt = now
+            });
+        }
         await _transactionRepository.SaveChangesAsync();
 
         return true;
     }
 
-    private async Task<(Account Account, Category? Category, string? Merchant, string? Note, string? PaymentMethod)>
+    private async Task<(Account Account, Account? DestinationAccount, Category? Category, string? Merchant, string? Note, string? PaymentMethod, List<string> Tags)>
         BuildAndValidateTransactionContext(
             Guid userId,
             string? typeInput,
             decimal amount,
             DateTime date,
             Guid accountId,
+            Guid? destinationAccountId,
             Guid? categoryId,
             string? merchantInput,
             string? noteInput,
-            string? paymentMethodInput)
+            string? paymentMethodInput,
+            List<string>? tagsInput,
+            ISet<Guid>? allowAccounts)
     {
         var type = typeInput?.Trim().ToLowerInvariant() ?? string.Empty;
         var merchant = string.IsNullOrWhiteSpace(merchantInput) ? null : merchantInput.Trim();
@@ -337,7 +488,7 @@ public class TransactionService : ITransactionService
             throw new DomainException("Payment method must be one of: cash, card, upi, bank_transfer, wallet, cheque.");
 
         if (!AllowedTypes.Contains(type))
-            throw new DomainException("Transaction type must be income or expense.");
+            throw new DomainException("Transaction type must be income, expense, or transfer.");
 
         if (amount <= 0)
             throw new DomainException("Amount must be greater than 0.");
@@ -356,7 +507,34 @@ public class TransactionService : ITransactionService
         {
             var member = await _memberRepository.GetByUserAndAccountAsync(userId, accountId);
             if (member is null || member.Role == "viewer" || !member.IsActive)
-                throw new DomainException("Account access denied.");
+            {
+                if (allowAccounts is null || !allowAccounts.Contains(accountId))
+                    throw new DomainException("Account access denied.");
+            }
+        }
+
+        Account? destinationAccount = null;
+        if (type == "transfer")
+        {
+            if (!destinationAccountId.HasValue)
+                throw new DomainException("Destination account is required for transfers.");
+
+            destinationAccount = await _accountRepository.GetByIdAsync(destinationAccountId.Value);
+            if (destinationAccount is null)
+                throw new DomainException("Destination account not found.");
+
+            if (destinationAccount.UserId != userId)
+            {
+                var member = await _memberRepository.GetByUserAndAccountAsync(userId, destinationAccountId.Value);
+                if (member is null || member.Role == "viewer" || !member.IsActive)
+                {
+                    if (allowAccounts is null || !allowAccounts.Contains(destinationAccountId.Value))
+                        throw new DomainException("Account access denied.");
+                }
+            }
+
+            if (destinationAccountId.Value == accountId)
+                throw new DomainException("Source and destination accounts must be different.");
         }
 
         Category? category = null;
@@ -379,7 +557,33 @@ public class TransactionService : ITransactionService
         if (paymentMethod is not null && paymentMethod.Length > 50)
             throw new DomainException("Payment method cannot exceed 50 characters.");
 
-        return (account, category, merchant, note, paymentMethod);
+        var tags = NormalizeAndValidateTags(tagsInput);
+
+        return (account, destinationAccount, category, merchant, note, paymentMethod, tags);
+    }
+
+    private static List<string> NormalizeAndValidateTags(List<string>? tagsInput)
+    {
+        if (tagsInput is null || tagsInput.Count == 0)
+            return new List<string>();
+
+        var tags = tagsInput
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Select(t => t.Trim())
+            .Where(t => t.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (tags.Count > 20)
+            throw new DomainException("A transaction can have at most 20 tags.");
+
+        foreach (var tag in tags)
+        {
+            if (tag.Length > 32)
+                throw new DomainException("Each tag cannot exceed 32 characters.");
+        }
+
+        return tags;
     }
 
     private static void ApplyBalance(Account account, string type, decimal amount)
@@ -409,6 +613,7 @@ public class TransactionService : ITransactionService
         {
             Id = transaction.Id,
             AccountId = transaction.AccountId,
+            DestinationAccountId = transaction.DestinationAccountId,
             CategoryId = transaction.CategoryId,
             Type = transaction.Type,
             Amount = transaction.Amount,
@@ -416,6 +621,7 @@ public class TransactionService : ITransactionService
             Merchant = transaction.Merchant,
             Note = transaction.Note,
             PaymentMethod = transaction.PaymentMethod,
+            Tags = transaction.Tags ?? new List<string>(),
             CreatedAt = transaction.CreatedAt,
             UpdatedAt = transaction.UpdatedAt
         };

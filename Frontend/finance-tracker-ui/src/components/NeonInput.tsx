@@ -37,7 +37,7 @@ const NeonInput = forwardRef<HTMLInputElement, Props>(
             "w-full rounded-2xl border px-4 py-4 text-base outline-none transition",
             tone === "light"
               ? "bg-slate-900/[0.04] text-slate-900 placeholder:text-slate-900/40 focus:bg-slate-900/[0.06] focus:shadow-[0_0_0_1px_rgba(34,211,238,0.20),0_0_22px_rgba(34,211,238,0.10)]"
-              : "bg-white/8 text-white placeholder:text-white/35 focus:bg-white/10 focus:shadow-[0_0_0_1px_rgba(34,211,238,0.18),0_0_24px_rgba(34,211,238,0.08)]",
+              : "bg-white/[0.08] text-white placeholder:text-white/35 focus:bg-white/[0.10] focus:shadow-[0_0_0_1px_rgba(34,211,238,0.18),0_0_24px_rgba(34,211,238,0.08)]",
             error
               ? "border-rose-400/50 focus:border-rose-400"
               : tone === "light"

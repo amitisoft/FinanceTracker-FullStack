@@ -13,9 +13,9 @@ import GlassCard from "../components/Glasscard";
 import NeonInput from "../components/NeonInput";
 import { getApiErrorMessage } from "../lib/getApiErrorMessage";
 import { formatCurrency, formatDate } from "../utils/format";
-import AppShell from "../components/AppShell";
+import { useToast } from "../components/ToastProvider";
 
-type TransactionType = "expense" | "income";
+type TransactionType = "expense" | "income" | "transfer";
 type PaymentMethod =
   | ""
   | "cash"
@@ -30,10 +30,12 @@ type TransactionFormState = {
   amount: string;
   date: string;
   accountId: string;
+  destinationAccountId: string;
   categoryId: string;
   merchant: string;
   note: string;
   paymentMethod: PaymentMethod;
+  tags: string;
 };
 
 type TransactionFormErrors = Partial<Record<keyof TransactionFormState, string>>;
@@ -54,15 +56,17 @@ const DEFAULT_VALUES: TransactionFormState = {
   amount: "",
   date: todayStr,
   accountId: "",
+  destinationAccountId: "",
   categoryId: "",
   merchant: "",
   note: "",
   paymentMethod: "",
+  tags: "",
 };
 
 type TransactionFilters = {
   search: string;
-  type: "" | "expense" | "income";
+  type: "" | "expense" | "income" | "transfer";
   accountId: string;
   categoryId: string;
   dateFrom: string;
@@ -90,6 +94,7 @@ function isValidPositiveMoneyString(value: string) {
 
 export default function TransactionsPage() {
   const queryClient = useQueryClient();
+  const { pushToast } = useToast();
 
   const { data: accounts } = useQuery({
     queryKey: ["accounts"],
@@ -163,6 +168,14 @@ export default function TransactionsPage() {
       setErrors({});
       setEditingId(null);
       setPage(1);
+      pushToast({ title: "Transaction saved", variant: "success" });
+    },
+    onError: (error) => {
+      pushToast({
+        title: "Failed to create transaction",
+        description: getApiErrorMessage(error, "Please try again."),
+        variant: "error",
+      });
     },
   });
 
@@ -177,6 +190,14 @@ export default function TransactionsPage() {
       setErrors({});
       setEditingId(null);
       setPage(1);
+      pushToast({ title: "Transaction updated", variant: "success" });
+    },
+    onError: (error) => {
+      pushToast({
+        title: "Failed to update transaction",
+        description: getApiErrorMessage(error, "Please try again."),
+        variant: "error",
+      });
     },
   });
 
@@ -187,6 +208,14 @@ export default function TransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
       setPageItems((prev) => prev.filter((t) => t.id !== id));
+      pushToast({ title: "Transaction deleted", variant: "info" });
+    },
+    onError: (error) => {
+      pushToast({
+        title: "Failed to delete transaction",
+        description: getApiErrorMessage(error, "Please try again."),
+        variant: "error",
+      });
     },
   });
 
@@ -255,7 +284,36 @@ export default function TransactionsPage() {
       nextErrors.accountId = "Account is required";
     }
 
+    if (values.type !== "transfer" && !values.categoryId) {
+      nextErrors.categoryId = "Category is required";
+    }
+
+    if (values.type === "transfer") {
+      if (!values.destinationAccountId) {
+        nextErrors.destinationAccountId = "Destination account is required";
+      } else if (values.destinationAccountId === values.accountId) {
+        nextErrors.destinationAccountId = "Source and destination must be different";
+      }
+    }
+
     return nextErrors;
+  }
+
+  function normalizeTags(input: string) {
+    return input
+      .split(",")
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+  }
+
+  function handleTypeChange(value: TransactionType) {
+    setForm((prev) => ({
+      ...prev,
+      type: value,
+      categoryId: value === "transfer" ? "" : prev.categoryId,
+      destinationAccountId: value === "transfer" ? prev.destinationAccountId : "",
+    }));
+    setErrors((prev) => ({ ...prev, categoryId: undefined, destinationAccountId: undefined }));
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -273,10 +331,12 @@ export default function TransactionsPage() {
       amount: Number(form.amount),
       date: `${form.date}T00:00:00Z`,
       accountId: form.accountId,
-      categoryId: form.categoryId || null,
+      destinationAccountId: form.type === "transfer" ? form.destinationAccountId : undefined,
+      categoryId: form.type === "transfer" ? null : form.categoryId || null,
       merchant: form.merchant.trim() || undefined,
       note: form.note.trim() || undefined,
       paymentMethod: form.paymentMethod || undefined,
+      tags: normalizeTags(form.tags),
     };
 
     if (editingId) {
@@ -288,25 +348,31 @@ export default function TransactionsPage() {
 
   function beginEdit(tx: any) {
     const dateOnly = typeof tx.date === "string" ? tx.date.slice(0, 10) : todayStr;
+    const normalizedType = String(tx.type).toLowerCase();
 
     setEditingId(tx.id);
     setForm({
-      type: (String(tx.type).toLowerCase() === "income" ? "income" : "expense") as TransactionType,
+      type: (normalizedType === "transfer"
+        ? "transfer"
+        : normalizedType === "income"
+          ? "income"
+          : "expense") as TransactionType,
       amount: String(tx.amount ?? ""),
       date: dateOnly,
       accountId: tx.accountId ?? "",
+      destinationAccountId: tx.destinationAccountId ?? "",
       categoryId: tx.categoryId ?? "",
       merchant: tx.merchant ?? "",
       note: tx.note ?? "",
       paymentMethod: (tx.paymentMethod ?? "") as PaymentMethod,
+      tags: Array.isArray(tx.tags) ? tx.tags.join(", ") : "",
     });
     setErrors({});
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   return (
-    <AppShell title="Transactions">
-      <div className="space-y-4 p-3 sm:space-y-6 sm:p-4">
+    <div className="space-y-4 sm:space-y-6">
         <div>
           <p className="text-sm uppercase tracking-[0.24em] text-cyan-300/75">
             Transactions
@@ -330,7 +396,7 @@ export default function TransactionsPage() {
                 <select
                   value={form.type}
                   onChange={(e) =>
-                    setField("type", e.target.value as TransactionType)
+                    handleTypeChange(e.target.value as TransactionType)
                   }
                   className="w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-4 text-white outline-none"
                 >
@@ -339,6 +405,9 @@ export default function TransactionsPage() {
                   </option>
                   <option value="income" className="text-black">
                     Income
+                  </option>
+                  <option value="transfer" className="text-black">
+                    Transfer
                   </option>
                 </select>
               </div>
@@ -370,7 +439,8 @@ export default function TransactionsPage() {
                 <select
                   value={form.accountId}
                   onChange={(e) => setField("accountId", e.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-4 text-white outline-none"
+                  disabled={!!editingId}
+                  className="w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-4 text-white outline-none disabled:opacity-60"
                 >
                   <option value="" className="text-black">
                     Select account
@@ -385,37 +455,73 @@ export default function TransactionsPage() {
                     </option>
                   ))}
                 </select>
+                {editingId && (
+                  <p className="text-xs text-white/45">Account is locked while editing.</p>
+                )}
                 {errors.accountId && (
                   <p className="text-sm text-rose-300">{errors.accountId}</p>
                 )}
               </div>
 
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-white/80">
-                  Category (optional)
-                </label>
-                <select
-                  value={form.categoryId}
-                  onChange={(e) => setField("categoryId", e.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-4 text-white outline-none"
-                >
-                  <option value="" className="text-black">
-                    Select category
-                  </option>
-                  {filteredCategories.map((category: any) => (
-                    <option
-                      key={category.id}
-                      value={category.id}
-                      className="text-black"
-                    >
-                      {category.name}
+              {form.type === "transfer" ? (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-white/80">
+                    Destination account
+                  </label>
+                  <select
+                    value={form.destinationAccountId}
+                    onChange={(e) => setField("destinationAccountId", e.target.value)}
+                    disabled={!!editingId}
+                    className="w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-4 text-white outline-none disabled:opacity-60"
+                  >
+                    <option value="" className="text-black">
+                      Select destination
                     </option>
-                  ))}
-                </select>
-                {errors.categoryId && (
-                  <p className="text-sm text-rose-300">{errors.categoryId}</p>
-                )}
-              </div>
+                    {accounts?.map((account: any) => (
+                      <option
+                        key={account.id}
+                        value={account.id}
+                        className="text-black"
+                      >
+                        {account.name}
+                      </option>
+                    ))}
+                  </select>
+                  {editingId && (
+                    <p className="text-xs text-white/45">Destination is locked while editing.</p>
+                  )}
+                  {errors.destinationAccountId && (
+                    <p className="text-sm text-rose-300">{errors.destinationAccountId}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-white/80">
+                    Category
+                  </label>
+                  <select
+                    value={form.categoryId}
+                    onChange={(e) => setField("categoryId", e.target.value)}
+                    className="w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-4 text-white outline-none"
+                  >
+                    <option value="" className="text-black">
+                      Select category
+                    </option>
+                    {filteredCategories.map((category: any) => (
+                      <option
+                        key={category.id}
+                        value={category.id}
+                        className="text-black"
+                      >
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.categoryId && (
+                    <p className="text-sm text-rose-300">{errors.categoryId}</p>
+                  )}
+                </div>
+              )}
 
               <NeonInput
                 label="Merchant"
@@ -429,6 +535,13 @@ export default function TransactionsPage() {
                 value={form.note}
                 onChange={(e) => setField("note", e.target.value)}
                 error={errors.note}
+              />
+
+              <NeonInput
+                label="Tags (comma separated)"
+                value={form.tags}
+                onChange={(e) => setField("tags", e.target.value)}
+                placeholder="food, groceries, family"
               />
 
               <div className="space-y-2">
@@ -526,6 +639,9 @@ export default function TransactionsPage() {
                   </option>
                   <option value="income" className="text-black">
                     Income
+                  </option>
+                  <option value="transfer" className="text-black">
+                    Transfer
                   </option>
                 </select>
               </div>
@@ -665,10 +781,20 @@ export default function TransactionsPage() {
                           {tx.accountId && accountNameById.get(tx.accountId)
                             ? ` - ${accountNameById.get(tx.accountId)}`
                             : ""}
-                          {tx.categoryId && categoryNameById.get(tx.categoryId)
+                          {tx.type === "transfer" && tx.destinationAccountId
+                            ? ` → ${accountNameById.get(tx.destinationAccountId) ?? "Destination"}`
+                            : ""}
+                          {tx.type !== "transfer" &&
+                          tx.categoryId &&
+                          categoryNameById.get(tx.categoryId)
                             ? ` - ${categoryNameById.get(tx.categoryId)}`
                             : ""}
                         </p>
+                        {Array.isArray(tx.tags) && tx.tags.length > 0 && (
+                          <p className="mt-1 text-xs text-white/45">
+                            Tags: {tx.tags.join(", ")}
+                          </p>
+                        )}
                       </div>
                       <div className="flex items-center justify-between gap-3 sm:justify-end">
                         <p className="font-semibold text-white">
@@ -716,8 +842,7 @@ export default function TransactionsPage() {
             )}
           </GlassCard>
         </div>
-      </div>
-    </AppShell>
+    </div>
   );
 }
 
@@ -731,10 +856,12 @@ function exportCsv(
     "Type",
     "Amount",
     "Account",
+    "DestinationAccount",
     "Category",
     "Merchant",
     "Note",
     "PaymentMethod",
+    "Tags",
   ];
 
   const escape = (value: string) => `"${value.replace(/\"/g, '""')}"`;
@@ -745,10 +872,12 @@ function exportCsv(
       tx.type,
       String(tx.amount),
       accountNameById.get(tx.accountId) ?? "",
+      tx.destinationAccountId ? accountNameById.get(tx.destinationAccountId) ?? "" : "",
       tx.categoryId ? categoryNameById.get(tx.categoryId) ?? "" : "",
       tx.merchant ?? "",
       tx.note ?? "",
       tx.paymentMethod ?? "",
+      Array.isArray(tx.tags) ? tx.tags.join("; ") : "",
     ]
       .map((v) => escape(String(v)))
       .join(",")
@@ -783,9 +912,11 @@ function exportPdf(
         <td>${tx.type}</td>
         <td>${tx.amount}</td>
         <td>${accountNameById.get(tx.accountId) ?? ""}</td>
+        <td>${tx.destinationAccountId ? accountNameById.get(tx.destinationAccountId) ?? "" : ""}</td>
         <td>${tx.categoryId ? categoryNameById.get(tx.categoryId) ?? "" : ""}</td>
         <td>${tx.merchant ?? ""}</td>
         <td>${tx.note ?? ""}</td>
+        <td>${Array.isArray(tx.tags) ? tx.tags.join(", ") : ""}</td>
       </tr>
     `
     )
@@ -811,9 +942,11 @@ function exportPdf(
               <th>Type</th>
               <th>Amount</th>
               <th>Account</th>
+              <th>Destination</th>
               <th>Category</th>
               <th>Merchant</th>
               <th>Note</th>
+              <th>Tags</th>
             </tr>
           </thead>
           <tbody>

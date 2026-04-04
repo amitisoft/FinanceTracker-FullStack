@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import GlassCard from "../components/Glasscard";
 import NeonInput from "../components/NeonInput";
-import AppShell from "../components/AppShell";
 import { getCategories } from "../features/categories/categoriesApi";
 import { createRule, deleteRule, getRules, updateRule } from "../features/rules/ruleApi";
 import type { Rule } from "../types/rule";
@@ -42,7 +41,6 @@ export default function RulesPage() {
   const canSubmit = useMemo(() => form.name.trim() && form.value.trim(), [form]);
 
   return (
-    <AppShell title="Rules">
       <div className="space-y-6 p-3 sm:p-4">
         <div>
           <p className="text-sm uppercase tracking-[0.24em] text-cyan-300/75">Automation</p>
@@ -181,6 +179,5 @@ export default function RulesPage() {
           </GlassCard>
         </div>
       </div>
-    </AppShell>
   );
 }

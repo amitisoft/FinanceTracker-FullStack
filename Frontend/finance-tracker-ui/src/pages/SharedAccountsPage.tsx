@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import AppShell from "../components/AppShell";
 import GlassCard from "../components/Glasscard";
 import NeonInput from "../components/NeonInput";
 import { getAccounts } from "../features/accounts/accountApi";
@@ -56,7 +55,6 @@ export default function SharedAccountsPage() {
   const canInvite = useMemo(() => selectedAccountId && inviteEmail.trim(), [selectedAccountId, inviteEmail]);
 
   return (
-    <AppShell title="Shared Accounts">
       <div className="space-y-6 p-3 sm:p-4">
         <div>
           <p className="text-sm uppercase tracking-[0.24em] text-cyan-300/75">Family mode</p>
@@ -178,6 +176,5 @@ export default function SharedAccountsPage() {
           </GlassCard>
         </div>
       </div>
-    </AppShell>
   );
 }

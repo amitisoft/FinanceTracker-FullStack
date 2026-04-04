@@ -1,5 +1,7 @@
 
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
@@ -31,6 +33,15 @@ body,
 
 body {
   overflow-x: hidden;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(34, 211, 238, 0.9);
+  outline-offset: 2px;
 }
 
 .glass-card {

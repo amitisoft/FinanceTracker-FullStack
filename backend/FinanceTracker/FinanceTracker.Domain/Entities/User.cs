@@ -10,6 +10,10 @@ public class User
 
     public string? DisplayName { get; set; }
 
+    public string? AvatarUrl { get; set; }
+
+    public string? AvatarColor { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     // Defaulted to true at DB level to avoid breaking existing accounts.

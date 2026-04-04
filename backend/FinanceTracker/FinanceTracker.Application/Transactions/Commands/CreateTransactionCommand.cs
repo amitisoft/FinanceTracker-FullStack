@@ -10,6 +10,8 @@ public class CreateTransactionCommand
 
     public Guid AccountId { get; set; }
 
+    public Guid? DestinationAccountId { get; set; }
+
     public Guid? CategoryId { get; set; }
 
     public string? Merchant { get; set; }
@@ -17,4 +19,6 @@ public class CreateTransactionCommand
     public string? Note { get; set; }
 
     public string? PaymentMethod { get; set; }
+
+    public List<string>? Tags { get; set; }
 }

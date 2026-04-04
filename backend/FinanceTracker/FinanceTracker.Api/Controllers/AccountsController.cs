@@ -69,6 +69,22 @@ public class AccountsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(AccountDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateAccountCommand command)
+    {
+        if (!TryGetUserId(out var userId))
+            return UnauthorizedProblem();
+
+        var result = await _accountService.UpdateAsync(userId, id, command);
+        if (result is null)
+            return NotFoundProblem("Account not found.");
+
+        return Ok(result);
+    }
+
     [HttpPost("transfer")]
     [ProducesResponseType(typeof(TransferResultDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]

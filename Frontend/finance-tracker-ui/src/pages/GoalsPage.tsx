@@ -11,7 +11,6 @@ import {
 import { getAccounts } from "../features/accounts/accountApi";
 import { getApiErrorMessage } from "../lib/getApiErrorMessage";
 import { formatCurrency } from "../utils/format";
-import AppShell from "../components/AppShell";
 
 type GoalFormState = {
   name: string;
@@ -162,7 +161,6 @@ export default function GoalsPage() {
   }
 
   return (
-    <AppShell title="Goals">
       <div className="space-y-4 p-3 sm:space-y-6 sm:p-4">
         <div>
           <p className="text-sm uppercase tracking-[0.24em] text-cyan-300/75">
@@ -345,6 +343,5 @@ export default function GoalsPage() {
           </GlassCard>
         </div>
       </div>
-    </AppShell>
   );
 }

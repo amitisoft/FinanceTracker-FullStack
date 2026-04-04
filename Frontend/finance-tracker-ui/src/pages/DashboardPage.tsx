@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getDashboardSummary } from "../features/dashboard/dashboardApi";
+import { getAccounts } from "../features/accounts/accountApi";
 import { getMonthlyForecast } from "../features/forecast/forecastApi";
 import { getHealthScore } from "../features/insights/insightsApi";
 import { getIncomeVsExpenseReport } from "../features/reports/reportsApi";
@@ -32,6 +33,11 @@ export default function DashboardPage() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard-summary", month, year],
     queryFn: () => getDashboardSummary(month, year),
+  });
+
+  const { data: accounts } = useQuery({
+    queryKey: ["accounts"],
+    queryFn: getAccounts,
   });
 
   const { data: forecast } = useQuery({
@@ -157,6 +163,35 @@ export default function DashboardPage() {
     expense: p.expense,
   }));
 
+  const onboardingSteps = [
+    {
+      id: "accounts",
+      done: (accounts?.length ?? 0) > 0,
+      title: "Create your first account",
+      action: "/accounts",
+    },
+    {
+      id: "transaction",
+      done: (data.recentTransactions?.length ?? 0) > 0,
+      title: "Add your first transaction",
+      action: "/transactions",
+    },
+    {
+      id: "budget",
+      done: (data.budgetProgressCards?.length ?? 0) > 0,
+      title: "Set a monthly budget",
+      action: "/budgets",
+    },
+    {
+      id: "goal",
+      done: (data.goalsSummary?.length ?? 0) > 0,
+      title: "Create a savings goal",
+      action: "/goals",
+    },
+  ];
+
+  const remainingSteps = onboardingSteps.filter((s) => !s.done);
+
   return (
     <div className="space-y-6">
       <div>
@@ -202,6 +237,47 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {remainingSteps.length > 0 && (
+        <GlassCard className="p-5 sm:p-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-cyan-300/70">Onboarding</p>
+              <h3 className="mt-2 text-xl font-semibold text-white">Finish your setup</h3>
+              <p className="mt-1 text-sm text-white/55">
+                Complete the quick steps below to unlock full analytics.
+              </p>
+            </div>
+            <span className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs text-white/70">
+              {onboardingSteps.length - remainingSteps.length}/{onboardingSteps.length} done
+            </span>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {onboardingSteps.map((step) => (
+              <div
+                key={step.id}
+                className={`flex items-center justify-between rounded-2xl border px-4 py-3 ${
+                  step.done
+                    ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-100"
+                    : "border-white/10 bg-white/5 text-white/80"
+                }`}
+              >
+                <span className="text-sm">{step.title}</span>
+                {step.done ? (
+                  <span className="text-xs text-emerald-100/80">Done</span>
+                ) : (
+                  <Link
+                    to={step.action}
+                    className="text-xs text-cyan-200 underline-offset-4 hover:underline"
+                  >
+                    Start
+                  </Link>
+                )}
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-4">
         <StatCard title="Income" value={formatCurrency(data.incomeTotal)} />
@@ -265,7 +341,7 @@ export default function DashboardPage() {
             {health?.hasData === false ? "--" : (health?.score ?? "--")}
           </p>
           <p className="mt-2 text-xs text-white/50">
-            {health?.hasData === false ? health?.note ?? "Add transactions to calculate a score." : "0–100 scale"}
+            {health?.hasData === false ? health?.note ?? "Add transactions to calculate a score." : "0-100 scale"}
           </p>
         </GlassCard>
       </div>
@@ -353,6 +429,69 @@ export default function DashboardPage() {
           </div>
         </GlassCard>
 
+        <GlassCard className="lg:col-span-6 p-6">
+          <h3 className="mb-5 text-lg font-semibold text-white">Upcoming expenses</h3>
+          {(forecast?.upcoming ?? []).length === 0 ? (
+            <p className="text-sm text-white/55">No upcoming items yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {forecast?.upcoming?.slice(0, 6).map((item, idx) => (
+                <div
+                  key={`${item.title}-${item.date}-${idx}`}
+                  className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/6 px-4 py-3"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-white">{item.title}</p>
+                    <p className="text-xs text-white/55">
+                      {formatDate(item.date)} • {item.source}
+                    </p>
+                  </div>
+                  <p
+                    className={`text-sm font-semibold ${
+                      String(item.type).toLowerCase() === "expense"
+                        ? "text-rose-300"
+                        : "text-emerald-300"
+                    }`}
+                  >
+                    {String(item.type).toLowerCase() === "expense" ? "-" : "+"}
+                    {formatCurrency(item.amount)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </GlassCard>
+
+        <GlassCard className="lg:col-span-6 p-6">
+          <h3 className="mb-5 text-lg font-semibold text-white">Forecast coverage</h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-4">
+              <p className="text-xs text-white/50">Starting balance</p>
+              <p className="mt-2 text-lg font-semibold text-white">
+                {forecast ? formatCurrency(forecast.startingBalance) : "--"}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-4">
+              <p className="text-xs text-white/50">Projected end</p>
+              <p className="mt-2 text-lg font-semibold text-white">
+                {forecast ? formatCurrency(forecast.projectedEndBalance) : "--"}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-4">
+              <p className="text-xs text-white/50">Income (forecast)</p>
+              <p className="mt-2 text-lg font-semibold text-white">
+                {forecast ? formatCurrency(forecast.totalIncome) : "--"}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-4">
+              <p className="text-xs text-white/50">Expenses (forecast)</p>
+              <p className="mt-2 text-lg font-semibold text-white">
+                {forecast ? formatCurrency(forecast.totalExpense) : "--"}
+              </p>
+            </div>
+          </div>
+        </GlassCard>
+
         <GlassCard className="lg:col-span-12 p-6">
           <h3 className="mb-5 text-lg font-semibold text-white">Recent transactions</h3>
           <div className="grid gap-3 md:grid-cols-2">
@@ -402,7 +541,7 @@ export default function DashboardPage() {
                       {item.isPaused ? " (Paused)" : ""}
                     </p>
                     <p className="text-xs text-white/55">
-                      {formatDate(item.nextRunDate)} â€¢ {item.accountName ?? "No account"} â€¢{" "}
+                      {formatDate(item.nextRunDate)} • {item.accountName ?? "No account"} •{" "}
                       {item.categoryName ?? "No category"}
                     </p>
                   </div>

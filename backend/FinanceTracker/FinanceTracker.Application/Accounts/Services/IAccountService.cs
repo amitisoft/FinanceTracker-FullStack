@@ -12,5 +12,7 @@ public interface IAccountService
 
     Task<AccountDto?> GetByIdAsync(Guid userId, GetAccountByIdQuery query);
 
+    Task<AccountDto?> UpdateAsync(Guid userId, Guid id, UpdateAccountCommand command);
+
     Task<TransferResultDto> TransferAsync(Guid userId, TransferFundsCommand command);
 }

@@ -66,6 +66,7 @@ public class FinanceTrackerDbContext : DbContext
             entity.Property(t => t.Amount).HasPrecision(12, 2);
             entity.Property(t => t.Merchant).HasMaxLength(200);
             entity.Property(t => t.PaymentMethod).HasMaxLength(50);
+            entity.Property(t => t.Tags).HasColumnType("text[]");
 
             entity.HasOne(t => t.User)
                 .WithMany(u => u.Transactions)
@@ -75,6 +76,11 @@ public class FinanceTrackerDbContext : DbContext
             entity.HasOne(t => t.Account)
                 .WithMany(a => a.Transactions)
                 .HasForeignKey(t => t.AccountId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(t => t.DestinationAccount)
+                .WithMany()
+                .HasForeignKey(t => t.DestinationAccountId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(t => t.Category)
@@ -229,6 +235,9 @@ public class FinanceTrackerDbContext : DbContext
         modelBuilder.Entity<User>(entity =>
         {
             entity.Property(u => u.Email).HasMaxLength(200).IsRequired();
+            entity.Property(u => u.DisplayName).HasMaxLength(60);
+            entity.Property(u => u.AvatarUrl).HasMaxLength(500);
+            entity.Property(u => u.AvatarColor).HasMaxLength(20);
             entity.Property(u => u.IsEmailVerified).HasDefaultValue(true);
         });
 

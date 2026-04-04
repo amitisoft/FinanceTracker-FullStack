@@ -10,7 +10,7 @@ import {
 } from "../features/budgets/budgetApi";
 import { getApiErrorMessage } from "../lib/getApiErrorMessage";
 import { formatCurrency } from "../utils/format";
-import AppShell from "../components/AppShell";
+import { useToast } from "../components/ToastProvider";
 
 const now = new Date();
 const currentMonth = now.getMonth() + 1;
@@ -42,6 +42,7 @@ function isValidPositiveMoneyString(value: string) {
 
 export default function BudgetsPage() {
   const queryClient = useQueryClient();
+  const { pushToast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [selectedYear, setSelectedYear] = useState(currentYear);
@@ -95,6 +96,14 @@ export default function BudgetsPage() {
         year: String(variables.year),
       });
       setErrors({});
+      pushToast({ title: "Budget saved", variant: "success" });
+    },
+    onError: (error) => {
+      pushToast({
+        title: "Failed to create budget",
+        description: getApiErrorMessage(error, "Please try again."),
+        variant: "error",
+      });
     },
   });
 
@@ -105,6 +114,14 @@ export default function BudgetsPage() {
         queryKey: ["budgets", selectedMonth, selectedYear],
       });
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      pushToast({ title: "Budget deleted", variant: "info" });
+    },
+    onError: (error) => {
+      pushToast({
+        title: "Failed to delete budget",
+        description: getApiErrorMessage(error, "Please try again."),
+        variant: "error",
+      });
     },
   });
 
@@ -146,13 +163,26 @@ export default function BudgetsPage() {
 
       if (result.total === 0) {
         setDupMessage("No previous-month budgets found to duplicate.");
+        pushToast({ title: "No budgets to duplicate", variant: "info" });
       } else {
         setDupMessage(
           `Duplicated ${result.created}/${result.total} budgets (skipped ${result.skipped}).`
         );
+        pushToast({
+          title: "Budgets duplicated",
+          description: `Created ${result.created}, skipped ${result.skipped}.`,
+          variant: "success",
+        });
       }
 
       setTimeout(() => setDupMessage(""), 6000);
+    },
+    onError: (error) => {
+      pushToast({
+        title: "Failed to duplicate budgets",
+        description: getApiErrorMessage(error, "Please try again."),
+        variant: "error",
+      });
     },
   });
 
@@ -240,7 +270,6 @@ export default function BudgetsPage() {
   }
 
   return (
-    <AppShell title="Budgets">
       <div className="space-y-4 p-3 sm:space-y-6 sm:p-4">
         <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -530,6 +559,5 @@ export default function BudgetsPage() {
           </GlassCard>
         </div>
       </div>
-    </AppShell>
   );
 }

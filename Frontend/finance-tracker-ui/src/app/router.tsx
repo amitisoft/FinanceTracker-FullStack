@@ -18,6 +18,7 @@ import RulesPage from "../pages/RulesPage";
 import SharedAccountsPage from "../pages/SharedAccountsPage";
 import InsightsPage from "../pages/InsightsPage";
 import HealthScorePage from "../pages/HealthScorePage";
+import SettingsPage from "../pages/SettingsPage";
 
 export const router = createBrowserRouter([
   {
@@ -59,6 +60,7 @@ export const router = createBrowserRouter([
           { path: "/shared", element: <SharedAccountsPage /> },
           { path: "/insights", element: <InsightsPage /> },
           { path: "/health-score", element: <HealthScorePage /> },
+          { path: "/settings", element: <SettingsPage /> },
         ],
       },
     ],

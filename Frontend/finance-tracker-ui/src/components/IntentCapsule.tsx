@@ -17,56 +17,101 @@ export default function IntentCapsule({
   tone = "dark",
 }: Props) {
   const [progress, setProgress] = useState(0);
-  const intervalRef = useRef<number | null>(null);
+  const completedRef = useRef(false);
+  const rafRef = useRef<number | null>(null);
+  const startRef = useRef<number | null>(null);
+  const holdingRef = useRef(false);
 
-  const clearTimer = () => {
-    if (intervalRef.current) {
-      window.clearInterval(intervalRef.current);
-      intervalRef.current = null;
+  const clearRaf = () => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
     }
+  };
+
+  const tick = () => {
+    if (!holdingRef.current || disabled) {
+      clearRaf();
+      return;
+    }
+
+    const now = performance.now();
+    const start = startRef.current ?? now;
+    startRef.current = start;
+
+    const holdDurationMs = 380;
+    const next = Math.min(100, Math.round(((now - start) / holdDurationMs) * 100));
+    setProgress(next);
+
+    if (next >= 100) {
+      holdingRef.current = false;
+      clearRaf();
+      completedRef.current = true;
+      onComplete();
+      return;
+    }
+
+    rafRef.current = requestAnimationFrame(tick);
   };
 
   const handleStart = () => {
     if (disabled) return;
-    if (progress >= 100) return;
-    if (intervalRef.current) return;
+    if (completedRef.current) return;
+    if (holdingRef.current) return;
 
-    clearTimer();
-    intervalRef.current = window.setInterval(() => {
-      setProgress((prev) => {
-        const next = prev + 6;
-        if (next >= 100) {
-          clearTimer();
-          onComplete();
-          return 100;
-        }
-        return next;
-      });
-    }, 18);
+    holdingRef.current = true;
+    startRef.current = performance.now() - (progress / 100) * 650;
+    clearRaf();
+    rafRef.current = requestAnimationFrame(tick);
   };
 
   const handleEnd = () => {
-    if (progress >= 100) return;
-    clearTimer();
+    if (completedRef.current) return;
+    holdingRef.current = false;
+    clearRaf();
     animate(progress, 0, {
-      duration: 0.28,
+      duration: 0.2,
       onUpdate: (value) => setProgress(Number(value.toFixed(0))),
+      onComplete: () => {
+        startRef.current = null;
+      },
     });
   };
 
   useEffect(() => {
-    return () => clearTimer();
+    return () => clearRaf();
   }, []);
+
+  useEffect(() => {
+    if (!disabled && progress >= 100) {
+      setProgress(0);
+      startRef.current = null;
+    }
+  }, [disabled, progress]);
+
+  useEffect(() => {
+    if (progress === 0) {
+      completedRef.current = false;
+    }
+  }, [progress]);
 
   return (
     <button
       type="button"
       disabled={disabled}
-      onMouseDown={handleStart}
-      onMouseUp={handleEnd}
-      onMouseLeave={handleEnd}
-      onTouchStart={handleStart}
-      onTouchEnd={handleEnd}
+      onPointerDown={(e) => {
+        if (disabled) return;
+        (e.currentTarget as HTMLButtonElement).setPointerCapture?.(e.pointerId);
+        handleStart();
+      }}
+      onPointerUp={(e) => {
+        (e.currentTarget as HTMLButtonElement).releasePointerCapture?.(e.pointerId);
+        handleEnd();
+      }}
+      onPointerCancel={(e) => {
+        (e.currentTarget as HTMLButtonElement).releasePointerCapture?.(e.pointerId);
+        handleEnd();
+      }}
       onBlur={handleEnd}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {

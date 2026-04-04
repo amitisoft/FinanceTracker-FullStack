@@ -108,6 +108,40 @@ public class AccountService : IAccountService
         return shared is null ? null : Map(shared);
     }
 
+    public async Task<AccountDto?> UpdateAsync(Guid userId, Guid id, UpdateAccountCommand command)
+    {
+        var account = await _accountRepository.GetByIdAsync(id, userId);
+        if (account is null)
+            return null;
+
+        var name = command.Name?.Trim() ?? string.Empty;
+        var type = command.Type?.Trim().ToLowerInvariant() ?? string.Empty;
+        var institutionName = string.IsNullOrWhiteSpace(command.InstitutionName)
+            ? null
+            : command.InstitutionName.Trim();
+
+        if (string.IsNullOrWhiteSpace(name))
+            throw new DomainException("Account name is required.");
+
+        if (name.Length > 100)
+            throw new DomainException("Account name cannot exceed 100 characters.");
+
+        if (!AllowedTypes.Contains(type))
+            throw new DomainException("Account type must be one of: bank, credit_card, cash, savings.");
+
+        if (institutionName is not null && institutionName.Length > 120)
+            throw new DomainException("Institution name cannot exceed 120 characters.");
+
+        account.Name = name;
+        account.Type = type;
+        account.InstitutionName = institutionName;
+        account.LastUpdatedAt = DateTime.UtcNow;
+
+        await _accountRepository.SaveChangesAsync();
+
+        return Map(account);
+    }
+
     public async Task<TransferResultDto> TransferAsync(Guid userId, TransferFundsCommand command)
     {
         if (command.SourceAccountId == command.DestinationAccountId)

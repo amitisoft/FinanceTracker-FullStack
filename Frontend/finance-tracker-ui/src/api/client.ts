@@ -1,12 +1,15 @@
 import axios from "axios";
 import { authStore } from "../store/authStore";
+import { bannerStore } from "../store/bannerStore";
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
+  timeout: 15000,
 });
 
 const refreshClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
+  timeout: 15000,
 });
 
 api.interceptors.request.use((config) => {
@@ -27,6 +30,13 @@ api.interceptors.response.use(
     const status = error?.response?.status;
     const originalRequest = error?.config;
 
+    if (status === 429) {
+      bannerStore.getState().setBanner("Too many attempts.", {
+        description: "Please wait a minute and try again.",
+        variant: "warning",
+      });
+    }
+
     if (!originalRequest || status !== 401) {
       return Promise.reject(error);
     }
@@ -39,12 +49,10 @@ api.interceptors.response.use(
       url.includes("/api/auth/forgot-password") ||
       url.includes("/api/auth/reset-password")
     ) {
-      authStore.getState().clearAuth();
       return Promise.reject(error);
     }
 
     if ((originalRequest as any)._retry) {
-      authStore.getState().clearAuth();
       return Promise.reject(error);
     }
     (originalRequest as any)._retry = true;
@@ -52,6 +60,10 @@ api.interceptors.response.use(
     const refreshToken = authStore.getState().refreshToken;
     if (!refreshToken) {
       authStore.getState().clearAuth();
+      bannerStore.getState().setBanner("Session expired.", {
+        description: "Please sign in again to continue.",
+        variant: "warning",
+      });
       return Promise.reject(error);
     }
 
@@ -60,8 +72,8 @@ api.interceptors.response.use(
         refreshPromise = refreshClient
           .post("/api/auth/refresh", { refreshToken })
           .then((res) => {
-            const accessToken = res?.data?.accessToken;
-            const nextRefresh = res?.data?.refreshToken ?? null;
+            const accessToken = res?.data?.accessToken ?? res?.data?.AccessToken;
+            const nextRefresh = res?.data?.refreshToken ?? res?.data?.RefreshToken ?? null;
 
             if (!accessToken) {
               throw new Error("Refresh succeeded but no accessToken returned.");
@@ -81,7 +93,14 @@ api.interceptors.response.use(
 
       return api(originalRequest);
     } catch (refreshError) {
-      authStore.getState().clearAuth();
+      const refreshStatus = (refreshError as any)?.response?.status;
+      if (refreshStatus === 400 || refreshStatus === 401) {
+        authStore.getState().clearAuth();
+        bannerStore.getState().setBanner("Session expired.", {
+          description: "Please sign in again to continue.",
+          variant: "warning",
+        });
+      }
       return Promise.reject(refreshError);
     }
   }

@@ -44,15 +44,19 @@ export default function LoginPage() {
     onSuccess: (data: any) => {
       const accessToken =
         data?.accessToken ??
+        data?.AccessToken ??
         data?.token ??
         data?.jwt ??
         data?.data?.accessToken ??
+        data?.data?.AccessToken ??
         data?.data?.token ??
         data?.data?.jwt;
 
       const refreshToken =
         data?.refreshToken ??
+        data?.RefreshToken ??
         data?.data?.refreshToken ??
+        data?.data?.RefreshToken ??
         null;
 
       if (!accessToken) {

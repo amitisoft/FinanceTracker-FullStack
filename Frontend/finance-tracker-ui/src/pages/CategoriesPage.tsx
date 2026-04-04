@@ -4,7 +4,6 @@ import { archiveCategory, createCategory, getCategories, updateCategory } from "
 import GlassCard from "../components/Glasscard";
 import NeonInput from "../components/NeonInput";
 import { getApiErrorMessage } from "../lib/getApiErrorMessage";
-import AppShell from "../components/AppShell";
 
 type CategoryType = "expense" | "income";
 
@@ -121,7 +120,6 @@ export default function CategoriesPage() {
   }
 
   return (
-    <AppShell title="Categories">
       <div className="space-y-4 p-3 sm:space-y-6 sm:p-4">
         <div>
           <p className="text-sm uppercase tracking-[0.24em] text-cyan-300/75">
@@ -279,6 +277,5 @@ export default function CategoriesPage() {
           </GlassCard>
         </div>
       </div>
-    </AppShell>
   );
 }

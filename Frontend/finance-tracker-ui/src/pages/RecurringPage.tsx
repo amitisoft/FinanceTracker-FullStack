@@ -13,7 +13,6 @@ import {
 } from "../features/recurring/recurringApi";
 import { getApiErrorMessage } from "../lib/getApiErrorMessage";
 import { formatCurrency, formatDate } from "../utils/format";
-import AppShell from "../components/AppShell";
 
 type RecurringType = "expense" | "income";
 type RecurringFrequency = "daily" | "weekly" | "monthly" | "yearly";
@@ -195,7 +194,6 @@ export default function RecurringPage() {
   }
 
   return (
-    <AppShell title="Recurring">
       <div className="space-y-4 p-3 sm:space-y-6 sm:p-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -482,6 +480,5 @@ export default function RecurringPage() {
           </GlassCard>
         </div>
       </div>
-    </AppShell>
   );
 }

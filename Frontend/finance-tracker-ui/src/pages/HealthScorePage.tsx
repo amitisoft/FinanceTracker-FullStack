@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import AppShell from "../components/AppShell";
 import GlassCard from "../components/Glasscard";
 import { getHealthScore } from "../features/insights/insightsApi";
 
@@ -7,7 +6,6 @@ export default function HealthScorePage() {
   const { data } = useQuery({ queryKey: ["health-score"], queryFn: getHealthScore });
 
   return (
-    <AppShell title="Health Score">
       <div className="space-y-6 p-3 sm:p-4">
         <div>
           <p className="text-sm uppercase tracking-[0.24em] text-cyan-300/75">Health</p>
@@ -50,6 +48,5 @@ export default function HealthScorePage() {
           </GlassCard>
         </div>
       </div>
-    </AppShell>
   );
 }

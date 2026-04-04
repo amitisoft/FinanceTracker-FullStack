@@ -8,6 +8,9 @@ public class Transaction
 
     public Guid AccountId { get; set; }
 
+    // For "transfer" transactions, this is the destination account.
+    public Guid? DestinationAccountId { get; set; }
+
     public Guid? CategoryId { get; set; }
 
     public string Type { get; set; } = string.Empty;
@@ -24,6 +27,8 @@ public class Transaction
 
     public Guid? RecurringTransactionId { get; set; }
 
+    public List<string> Tags { get; set; } = new();
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
@@ -31,6 +36,8 @@ public class Transaction
     public User? User { get; set; }
 
     public Account? Account { get; set; }
+
+    public Account? DestinationAccount { get; set; }
 
     public Category? Category { get; set; }
 }

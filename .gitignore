@@ -3,8 +3,13 @@
 obj/
 bin/
 *.user
+.dotnet/
 
 # Node/React junk
 node_modules/
 dist/
 .env
+
+# Local scratch / analysis artifacts
+specs/
+tmp_restore.txt

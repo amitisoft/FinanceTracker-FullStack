@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import AppShell from "../components/AppShell";
 import GlassCard from "../components/Glasscard";
 import { getInsights, getHealthScore } from "../features/insights/insightsApi";
 import { getTrendsReport, getNetWorthReport } from "../features/reports/reportsV2Api";
@@ -30,8 +29,35 @@ export default function InsightsPage() {
     netWorth: p.netWorth,
   })), [netWorth]);
 
+  const categoryTrendSeries = useMemo(() => {
+    const trendItems = trends?.categoryTrends ?? [];
+    if (trendItems.length === 0) return { data: [], keys: [] as string[] };
+
+    const totals = new Map<string, number>();
+    trendItems.forEach((t) => {
+      totals.set(t.categoryName, (totals.get(t.categoryName) ?? 0) + t.totalAmount);
+    });
+
+    const keys = Array.from(totals.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([name]) => name);
+
+    const byPeriod: Record<string, Record<string, number>> = {};
+    trendItems.forEach((t) => {
+      if (!keys.includes(t.categoryName)) return;
+      const period = t.period;
+      byPeriod[period] = byPeriod[period] ?? { period };
+      byPeriod[period][t.categoryName] = t.totalAmount;
+    });
+
+    const data = Object.values(byPeriod)
+      .sort((a, b) => String(a.period).localeCompare(String(b.period)));
+
+    return { data, keys };
+  }, [trends?.categoryTrends]);
+
   return (
-    <AppShell title="Insights">
       <div className="space-y-6 p-3 sm:p-4">
         <div>
           <p className="text-sm uppercase tracking-[0.24em] text-cyan-300/75">Insights</p>
@@ -110,7 +136,41 @@ export default function InsightsPage() {
             </div>
           </GlassCard>
         </div>
+
+        <GlassCard className="p-5">
+          <h3 className="mb-4 text-lg font-semibold text-white">Category trends</h3>
+          {categoryTrendSeries.data.length === 0 ? (
+            <p className="text-sm text-white/55">Not enough category data yet.</p>
+          ) : (
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={categoryTrendSeries.data}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                  <XAxis dataKey="period" stroke="rgba(255,255,255,0.55)" fontSize={12} />
+                  <YAxis stroke="rgba(255,255,255,0.55)" fontSize={12} />
+                  <Tooltip
+                    contentStyle={{
+                      background: "rgba(15, 23, 42, 0.92)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      borderRadius: "16px",
+                    }}
+                    formatter={(value: number, name: string) => [formatCurrency(value), name]}
+                  />
+                  {categoryTrendSeries.keys.map((key, idx) => (
+                    <Line
+                      key={key}
+                      type="monotone"
+                      dataKey={key}
+                      stroke={["#22d3ee", "#8b5cf6", "#f472b6", "#34d399"][idx % 4]}
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </GlassCard>
       </div>
-    </AppShell>
   );
 }

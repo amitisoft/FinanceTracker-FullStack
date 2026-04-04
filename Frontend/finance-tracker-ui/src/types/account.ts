@@ -17,6 +17,12 @@ export type CreateAccountRequest = {
   institutionName?: string;
 };
 
+export type UpdateAccountRequest = {
+  name: string;
+  type: string;
+  institutionName?: string;
+};
+
 export type TransferFundsRequest = {
   sourceAccountId: string;
   destinationAccountId: string;
